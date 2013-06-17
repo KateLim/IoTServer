@@ -80,15 +80,18 @@ public class IPList {
 					InetAddress inetAddress = address.getAddress();
 					
 					// for getting IPV4 format
-      				if (!inetAddress.isLoopbackAddress() && (inetAddress instanceof Inet4Address) ) {
+      				if (!inetAddress.isLoopbackAddress() && 
+      					(inetAddress instanceof Inet4Address) &&
+      					(address.getBroadcast() != null) ) {
+
+	                    System.out.println("ip---::" + address);
+	    				System.out.println("prefixLength : " + address.getNetworkPrefixLength());
 
 	                    myIpAddr = inetAddress.getHostAddress().toString();
 	                    mySubnetMask = getIPv4LocalNetMask(inetAddress, address.getNetworkPrefixLength());
-	                    //System.out.println("ip---::" + ip);
 	                    break;
                     }
    					//System.out.println("Address: " + address);
-	    			//System.out.println(" prefixLength : " + address.getNetworkPrefixLength());
 				}
 				
 				if (myIpAddr != null)
