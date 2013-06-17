@@ -27,9 +27,10 @@ public class ServerMain {
 						}
 						req.response()
 								.headers()
-								.add("Content-Type", "text/html; charset=UTF-8");
+								.add("Content-Type", "json; charset=UTF-8");
 						req.response()
-								.end("<html><body><h1>Hello from vert.x!</h1></body></html>");
+								.end("{ \"request_uri\" : \"" + req.uri() + "\" ," +
+						                " \"response\" : { \"test_array\" : [{ \"a\" : \"b\", \"c\" : \"d\" }, { \"e\" : \"f\"}]}}");
 						// String file = req.path().equals("/") ? "index.html" :
 						// req.path();
 						// req.response().sendFile("webroot/" + file);
