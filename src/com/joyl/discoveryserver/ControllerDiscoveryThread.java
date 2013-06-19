@@ -7,7 +7,7 @@ import java.net.MulticastSocket;
 import java.net.UnknownHostException;
 
 public class ControllerDiscoveryThread extends Thread {
-	public static final String IOTSVR_MCAST_ADDRESS = "224.0.0.30";
+	public static final String IOTSVR_MCAST_ADDRESS = "224.0.0.251";
 	public static final int IOTSVR_MCAST_PORT = 50000;
 	public static final int ANNOUNCE_INTERVAL = 1000;	// 1 second
 
