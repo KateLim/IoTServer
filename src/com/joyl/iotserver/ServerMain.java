@@ -23,7 +23,7 @@ public class ServerMain {
 		System.out.println("started");
 		Vertx vertx = VertxFactory.newVertx("localhost");
 		vertx.createHttpServer().requestHandler(rm)
-			.setSSL(true).setKeyStorePath("server-keystore.jks").setKeyStorePassword("wibble")
+//			.setSSL(true).setKeyStorePath("server-keystore.jks").setKeyStorePassword("wibble")
 			.listen(50001);
 
 		vertx.createNetServer().connectHandler(new Handler<NetSocket>() {
@@ -31,6 +31,7 @@ public class ServerMain {
 				socket.dataHandler(new Handler<Buffer>() {
 					public void handle(Buffer buffer) {
 						socket.write(buffer);
+					
 					}
 				});
 			}
