@@ -3,6 +3,8 @@ package com.joyl.iotserver;
 import java.util.ArrayList;
 import java.util.HashMap;
 
+import org.vertx.java.core.json.JsonObject;
+
 import com.joyl.iotserver.SANode.NodeStatus;
 
 public class SANodeManager {
@@ -23,16 +25,12 @@ public class SANodeManager {
 		blockedIDList.add("efgh");
 	}
 
-	private boolean IsInActivatedList(String nodeID) {
-		if (activatedIDList.contains(nodeID))
-			return true;
-		return false;
+	private boolean isInActivatedList(String nodeID) {
+		return activatedIDList.contains(nodeID);
 	}
 
-	private boolean IsInBlockedList(String nodeID) {
-		if (blockedIDList.contains(nodeID))
-			return true;
-		return false;
+	private boolean isInBlockedList(String nodeID) {
+		return blockedIDList.contains(nodeID);
 	}
 	
 	private String generateSessionID() {
@@ -41,12 +39,18 @@ public class SANodeManager {
 		return sessionID;
 	}
 	
+	public boolean isConnectedNode(String nodeID) {
+		return connectedNodeList.containsKey(nodeID);
+	}
+	
 	public NodeStatus handleNewNode(SANode node) {
-		if (IsInActivatedList(node.getID())) {
+		if (isInActivatedList(node.getID())) {
 			node.setStatus(NodeStatus.ACTIVATED);
-			SANodeSession nodeSession = new SANodeSession(node, generateSessionID());
+//			SANodeSession nodeSession = new SANodeSession(node, generateSessionID());
+			// IMPORTANT session ID is not automatically generated but use Activation Code for temporal implementation
+			SANodeSession nodeSession = new SANodeSession(node, node.getActivationCode());
 			connectedNodeList.put(node.getID(), nodeSession);
-		}else if (IsInBlockedList(node.getID())) {
+		}else if (isInBlockedList(node.getID())) {
 			node.setStatus(NodeStatus.BLOCKED);
 		}else {
 			node.setStatus(NodeStatus.WAITING);
@@ -66,7 +70,7 @@ public class SANodeManager {
 		return true;
 	}
 	
-	public boolean updateSensorValue(String nodeID, String sessionID, String sensorValue) {
+	public boolean updateSensorValue(String nodeID, String sessionID, JsonObject sensorValue) {
 		SANodeSession session = connectedNodeList.get(nodeID);
 
 		if (session == null || session.isValidSession(sessionID) == false)
@@ -77,6 +81,26 @@ public class SANodeManager {
 		return true;
 	}
 	
+	public boolean updateActuatorValue(String nodeID, String sessionID, JsonObject actuatorValue) {
+		SANodeSession session = connectedNodeList.get(nodeID);
+
+		if (session == null || session.isValidSession(sessionID) == false)
+			return false;
+	
+		session.setLastActuatorValue(actuatorValue);
+		
+		return true;
+	}
+
+	// when controller asks to set actuator value (we can't know session ID)
+	public boolean updateActuatorValue(String nodeID, JsonObject actuatorValue) {
+		SANodeSession session = connectedNodeList.get(nodeID);
+
+		session.setLastActuatorValue(actuatorValue);
+		
+		return true;
+	}
+
 	public String getSessionID(String nodeID) {
 		SANodeSession session = connectedNodeList.get(nodeID);
 
@@ -128,5 +152,41 @@ public class SANodeManager {
 		nodeListJsonStr += "}";
 		
 		return nodeListJsonStr;
+	}
+	
+	public boolean moveNodeToConnectedList(String nodeID, String activationCode) {
+		SANode node = waitingNodeList.get(nodeID);
+		if (node == null)
+			return false;
+		
+		if (!node.getActivationCode().equals(activationCode))
+			return false;
+		
+		waitingNodeList.remove(nodeID);
+		
+		node.setStatus(NodeStatus.ACTIVATED);
+//		connectedNodeList.put(nodeID, new SANodeSession(node, generateSessionID()));
+		// IMPORTANT session ID is not automatically generated but use Activation Code for temporal implementation
+		connectedNodeList.put(nodeID, new SANodeSession(node, node.getActivationCode()));
+				
+		activatedIDList.add(nodeID);
+		
+		return true;
+	}
+
+	public String getNodeValueJsonStr(String nodeID) {
+		SANodeSession session = connectedNodeList.get(nodeID);
+		
+		if (session == null)
+			return null;
+		
+		return session.getLastSensorActuatorValueStr();
+	}
+
+	public void removeOldSession(long timeDurationMillis) {
+		for (String nodeID : connectedNodeList.keySet()) {
+			if (!connectedNodeList.get(nodeID).isAlive(timeDurationMillis))
+				connectedNodeList.remove(nodeID);			
+		}
 	}
 }

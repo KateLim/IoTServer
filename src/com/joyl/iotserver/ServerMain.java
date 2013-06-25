@@ -3,6 +3,7 @@ package com.joyl.iotserver;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 import org.vertx.java.core.Handler;
 import org.vertx.java.core.Vertx;
@@ -13,23 +14,28 @@ import org.vertx.java.core.http.RouteMatcher;
 import org.vertx.java.core.json.JsonArray;
 import org.vertx.java.core.json.JsonObject;
 import org.vertx.java.core.net.NetSocket;
+import org.vertx.java.core.parsetools.RecordParser;
 
 
 public class ServerMain {
+	static final String VERSION = "1.0";
 	static final String ACTIVATIONCODE = "HBKK5Q7";
 	static String password = null;
 		
 	static ControllerManager controllerManager = new ControllerManager();
 	
 	static SANodeManager nodeManager = new SANodeManager();
-	static HashMap<String, NetSocket> nodeSocketMap = new HashMap<String, NetSocket>(); // SANodeID : NetSocket
+	static ConcurrentHashMap<String, NetSocket> nodeSocketMap = new ConcurrentHashMap<String, NetSocket>(); // SANodeID : NetSocket
+	
+	static ConcurrentHashMap<NetSocket, RequestToNode> requestToNodeMap = new ConcurrentHashMap<NetSocket, RequestToNode>();
 
 	/**
 	 * @param args
 	 */
 	public static void main(String[] args) {
-		// TODO Auto-generated method stub
 		
+		ServerMain serverMain = new ServerMain();
+
 		RouteMatcher rm = new RouteMatcher();
 		initializeRouteMatcher(rm);
 
@@ -41,20 +47,40 @@ public class ServerMain {
 
 		vertx.createNetServer().connectHandler(new Handler<NetSocket>() {
 			public void handle(final NetSocket socket) {
-				socket.dataHandler(new Handler<Buffer>() {
+		        socket.dataHandler(RecordParser.newDelimited("\n", new Handler<Buffer>() {
+//			socket.dataHandler(new Handler<Buffer>() {
 					public void handle(Buffer buffer) {
 						// handling request from SANode
 						handleNodeRequest(socket, buffer);
 					}
+				}));
+				
+				socket.closeHandler(new Handler<Void>() {
+					public void handle(Void v) {
+						// handling socket close
+						for (String nodeID : nodeSocketMap.keySet()) {
+							if (nodeSocketMap.equals(socket)) {
+								nodeSocketMap.remove(nodeID);
+								break;
+							}
+						}
+						if (requestToNodeMap.get(socket) != null) {
+							requestToNodeMap.remove(socket);
+						}
+					}
 				});
 			}
 		}).listen(50000);
+		
+		long timeoutDuration = 72*60*60*1000;	// 72 hours
+		new PeriodicTimer(timeoutDuration, timeoutDuration, timeoutDuration,
+				controllerManager, nodeManager); 
 	}
 
 	static private void initializeRouteMatcher(RouteMatcher rm) {
 
 		// IC00. Connection
-		rm.get("/", new Handler<HttpServerRequest>() {
+		rm.get("/" + VERSION + "/", new Handler<HttpServerRequest>() {
 			public void handle(HttpServerRequest req) {
 				if (password == null) {
 					respondToController(req, 200, "{ \"next\" : \"activation\" }");
@@ -65,7 +91,7 @@ public class ServerMain {
 		});
 
 		// IC01. Activate Server
-		rm.put("/activation", new Handler<HttpServerRequest>() {
+		rm.put("/" + VERSION + "/activation", new Handler<HttpServerRequest>() {
 			public void handle(HttpServerRequest req) {
 				try {
 					String activationCode = req.params().get("activationCode"); 
@@ -85,8 +111,10 @@ public class ServerMain {
 		});
 
 		// IC02. Set password
-		rm.put("/password", new Handler<HttpServerRequest>() {
+		rm.put("/" + VERSION + "/password", new Handler<HttpServerRequest>() {
 			public void handle(HttpServerRequest req) {
+				printRequest(req);
+				
 				try {
 					String password = req.params().get("password"); 
 					
@@ -106,13 +134,13 @@ public class ServerMain {
 		});
 
 		// IC03. Log-in with password
-		rm.put("/login", new Handler<HttpServerRequest>() {
+		rm.put("/" + VERSION + "/login", new Handler<HttpServerRequest>() {
 			public void handle(HttpServerRequest req) {
 				try {
 					String controllerID = req.params().get("controllerID");
 					String password = req.params().get("password"); 
 					
-					if (password == null || !ServerMain.password.equals(password)) {
+					if (password == null || ServerMain.password == null || !ServerMain.password.equals(password)) {
 						throw new ControllerException(400);
 					}
 					
@@ -129,12 +157,12 @@ public class ServerMain {
 		});
 
 		// IC04. Get SA node list (waiting list + connected list)
-		rm.get("/nodelist", new Handler<HttpServerRequest>() {
+		rm.get("/" + VERSION + "/nodelist", new Handler<HttpServerRequest>() {
 			public void handle(HttpServerRequest req) {
 				try {
 					String sessionID = req.params().get("sessionID");
 					
-					if (sessionID == null || !controllerManager.isValidSessionID(sessionID)) {
+					if (sessionID == null || !controllerManager.validateSession(sessionID)) {
 						throw new ControllerException(401);
 					}
 					// get waiting List
@@ -166,26 +194,86 @@ public class ServerMain {
 
 		// IC05. Activate SA Node
 		// handle SA Node : /nodelist/connected/[nodeID]/[actuatorName]
-		rm.put("/nodelist/connected/:nodeid", new Handler<HttpServerRequest>() {
+		rm.put("/" + VERSION + "/nodelist/connected/:nodeid", new Handler<HttpServerRequest>() {
 			public void handle(HttpServerRequest req) {
-				// initial connection
-				respondToController(req);
+				try {
+					String nodeID = req.params().get("nodeid");
+					String sessionID = req.params().get("sessionID");
+					String activationCode = req.params().get("activationCode");
+					
+					if (sessionID == null || !controllerManager.validateSession(sessionID)) {
+						throw new ControllerException(401);
+					}
+					if (activationCode == null) {
+						throw new ControllerException(400);
+					}
+					
+					if (!nodeManager.moveNodeToConnectedList(nodeID, activationCode)) {
+						throw new ControllerException(403);
+					}
+							
+					respondToController(req, 200);
+					
+					// TODO send to SANode that it is activated.
+					sendToNode(nodeID, "/1.0/activation", "{ \"sessionID\" : \"" + nodeManager.getSessionID(nodeID) + "\" }", req, false);
+				} catch (ControllerException e) {
+					// TODO Auto-generated catch block
+					e.printStackTrace();
+					respondToController(req, e.errorCode, e.getMessage());
+				}
 			}
 		});
 
 		// IC06. Get connected SA Node List
-		rm.get("/nodelist/connected", new Handler<HttpServerRequest>() {
+		rm.get("/" + VERSION + "/nodelist/connected", new Handler<HttpServerRequest>() {
 			public void handle(HttpServerRequest req) {
-				// initial connection
-				respondToController(req);
+				try {
+					String sessionID = req.params().get("sessionID");
+					
+					if (sessionID == null || !controllerManager.validateSession(sessionID)) {
+						throw new ControllerException(401);
+					}
+					// get connected List
+					String connectedListStr = nodeManager.getConnectedListJsonStr();
+					
+					String nodeListStr =  "{ ";
+					if (connectedListStr != null)
+						nodeListStr += connectedListStr;
+					nodeListStr += "}";
+							
+					respondToController(req, 200, nodeListStr);
+				} catch (ControllerException e) {
+					// TODO Auto-generated catch block
+					e.printStackTrace();
+					respondToController(req, e.errorCode, e.getMessage());
+				}
 			}
 		});
 
 		// IC07. Get waiting to be activated SA Node List
-		rm.get("/nodelist/waiting", new Handler<HttpServerRequest>() {
+		rm.get("/" + VERSION + "/nodelist/waiting", new Handler<HttpServerRequest>() {
 			public void handle(HttpServerRequest req) {
-				// initial connection
-				respondToController(req);
+				try {
+					String sessionID = req.params().get("sessionID");
+					
+					if (sessionID == null || !controllerManager.validateSession(sessionID)) {
+						throw new ControllerException(401);
+					}
+					// get waiting List
+					String waitingListStr = nodeManager.getWaitingListJsonStr();
+					
+					String nodeListStr =  "{ ";
+					if (waitingListStr != null) {
+						nodeListStr += waitingListStr;
+					}
+					nodeListStr += "}";
+							
+					respondToController(req, 200, nodeListStr);
+				} catch (ControllerException e) {
+					// TODO Auto-generated catch block
+					e.printStackTrace();
+					respondToController(req, e.errorCode, e.getMessage());
+				}
 			}
 		});
 
@@ -196,38 +284,84 @@ public class ServerMain {
 		
 		// IC11. Get SA Node Info (Current value)
 		// get current SA Node Info
-		rm.get("/nodelist/connected/:nodeid", new Handler<HttpServerRequest>() {
+		rm.get("/" + VERSION + "/nodelist/connected/:nodeid", new Handler<HttpServerRequest>() {
 			public void handle(HttpServerRequest req) {
-				// initial connection
-				respondToController(req);
+				try {
+					String sessionID = req.params().get("sessionID");
+					
+					if (sessionID == null || !controllerManager.validateSession(sessionID)) {
+						throw new ControllerException(401);
+					}
+					// get waiting List
+					String nodeInfoStr = nodeManager.getNodeValueJsonStr(req.params().get("nodeid"));
+					
+					respondToController(req, 200, nodeInfoStr);
+				} catch (ControllerException e) {
+					// TODO Auto-generated catch block
+					e.printStackTrace();
+					respondToController(req, e.errorCode, e.getMessage());
+				}
 			}
 		});
 
 		// IC12. Handle SA Node
-		rm.put("/nodelist/connected/:nodeid/:actuator", new Handler<HttpServerRequest>() {
+		rm.put("/" + VERSION + "/nodelist/connected/:nodeid/:actuator", new Handler<HttpServerRequest>() {
 			public void handle(HttpServerRequest req) {
+				try {
+					String sessionID = req.params().get("sessionID");
+					
+					if (sessionID == null || !controllerManager.validateSession(sessionID)) {
+						throw new ControllerException(401);
+					}
+					
+					String nodeID = req.params().get("nodeid");
+					
+					// send to SANode
+					if (!sendToNode(nodeID, "/1.0/actuator", 
+							"{ \"" + req.params().get("actuator") + "\" : \"" + req.params().get("value") + "\" }", 
+							req, false))
+						throw new ControllerException(404);
+//					respondToController(req, 200, nodeInfoStr);
+				} catch (ControllerException e) {
+					// TODO Auto-generated catch block
+					e.printStackTrace();
+					respondToController(req, e.errorCode, e.getMessage());
+				}
 				// initial connection
-				respondToController(req);
+//				respondToController(req);
 			}
 		});
 
 		// IC13. Get Log
 		// get log
-		rm.get("/log", new Handler<HttpServerRequest>() {
+		rm.get("/" + VERSION + "/log", new Handler<HttpServerRequest>() {
+			public void handle(HttpServerRequest req) {
+				try {
+					String sessionID = req.params().get("sessionID");
+					
+					if (sessionID == null || !controllerManager.validateSession(sessionID)) {
+						throw new ControllerException(401);
+					}
+					
+					respondToController(req, 200, Logger.getLogList());
+				} catch (ControllerException e) {
+					// TODO Auto-generated catch block
+					e.printStackTrace();
+					respondToController(req, e.errorCode, e.getMessage());
+				}
+				// initial connection
+//				respondToController(req);
+			}
+		});
+
+		rm.get("/" + VERSION + "/log/:nodeid", new Handler<HttpServerRequest>() {
 			public void handle(HttpServerRequest req) {
 				// initial connection
 				respondToController(req);
 			}
 		});
 
-		rm.get("/log/:nodeid", new Handler<HttpServerRequest>() {
-			public void handle(HttpServerRequest req) {
-				// initial connection
-				respondToController(req);
-			}
-		});
-
-		rm.get("/log/:nodeid/:saname", new Handler<HttpServerRequest>() {
+		rm.get("/" + VERSION + "/log/:nodeid/:saname", new Handler<HttpServerRequest>() {
 			public void handle(HttpServerRequest req) {
 				// initial connection
 				respondToController(req);
@@ -255,12 +389,23 @@ public class ServerMain {
 		}
 	}
 	
+	static private void respondToController(HttpServerRequest req, int statusCode) {
+//		printRequest(req);
+//		
+//		req.response().setStatusCode(statusCode);
+//		req.response().headers().add("Content-Type", "json; charset=UTF-8");
+//		req.response().end();
+		respondToController(req, statusCode, "");
+	}
+
 	static private void respondToController(HttpServerRequest req, int statusCode, String jsonStr) {
 		printRequest(req);
 		
 		req.response().setStatusCode(statusCode);
 		req.response().headers().add("Content-Type", "json; charset=UTF-8");
 		req.response().end(jsonStr);
+		
+		System.out.println(statusCode + " : " + jsonStr);
 	}
 	
 	static private void respondToController(HttpServerRequest req) {
@@ -294,22 +439,46 @@ public class ServerMain {
 	}
 	
 	static void handleNodeRequest(final NetSocket socket, Buffer buffer) {
-		String[] urlNjson = buffer.toString().split(" ");
-		String jsonStr = buffer.toString().substring(urlNjson[0].length() + 1);
+		// check whether request or respond
+		String trimedBuffer = buffer.toString().trim();
+		String[] urlNjson = trimedBuffer.split(" ");
+		String jsonStr = (trimedBuffer.length() > urlNjson[0].length()) ? trimedBuffer.substring(urlNjson[0].length() + 1) : "";
 
 		try {
+			System.out.println(">> from Node : (" + urlNjson[0] + ") " + trimedBuffer);
 		
-		if (!urlNjson[0].startsWith("/1.0/")) {
-			throw new NodeException(400, "Invalid version");
-		}
-		
-		for (String s : urlNjson) {
-			System.out.println(">> echo : " + s);
-		}
+		RequestToNode requestToNode = requestToNodeMap.get(socket);;
 		
 		switch (urlNjson[0]) // for URL
 		{
-		case "/1.0/sanode" :	
+		case "200" :
+			if (requestToNode != null && requestToNode.isResponseNeeded) {
+				switch (requestToNode.url) {
+				case "/" + VERSION + "/activation" :
+					respondToController(requestToNode.controllerReq, 200, requestToNode.param);
+					break;
+				case "/" + VERSION + "/actuator" :
+					JsonObject jsonObj = new JsonObject(requestToNode.param);
+					nodeManager.updateActuatorValue(requestToNode.nodeID, jsonObj);
+					respondToController(requestToNode.controllerReq, 200, requestToNode.param);
+					break;
+				default :
+					respondToController(requestToNode.controllerReq, 200);
+					break;
+				}
+			}
+			break;
+		case "500" :
+			if (requestToNode != null && requestToNode.isResponseNeeded) {
+				respondToController(requestToNode.controllerReq, 500, jsonStr);
+			}
+			break;
+		case "400" :
+			if (requestToNode != null && requestToNode.isResponseNeeded) {
+				respondToController(requestToNode.controllerReq, 500, jsonStr);
+			}
+			break;
+		case "/" + VERSION + "/sanode" :	
 			// IS01. Connect to IoT Server
 			//		/sanode
 			SANode node = new SANode(jsonStr);
@@ -327,33 +496,38 @@ public class ServerMain {
 			}
 			break;
 		default :
-			if (urlNjson[0].startsWith("/1.0/sanode/")) {
+			if (urlNjson[0].startsWith("/" + VERSION + "/sanode/")) {
 				String[] splittedUrl = urlNjson[0].split("/");
 
 				for (String s : splittedUrl) {
 					System.out.println(">> echo : " + s);
 				}
-
+				
 				JsonObject jsonObj = new JsonObject(jsonStr);
 
 				String sessionID = jsonObj.getString("sessionID");
 				String nodeID = splittedUrl[3];
 				
-				if (sessionID == null)
+				if (!nodeManager.isConnectedNode(nodeID)) 
+					throw new NodeException(404);
+
+				if (sessionID == null || !nodeManager.getSessionID(nodeID).equals(sessionID))
 						throw new NodeException(401, "Invalid session ID.");
 				
 				// update socket info. 
 				nodeSocketMap.put(nodeID, socket);
 
-					switch (splittedUrl.length)
+				switch (splittedUrl.length)
 				{
 				case 4 :
 					// IS02. Send Sensor value
 					//		/sanode/[nodeID]
-					if (nodeManager.updateSensorValue(nodeID, sessionID, jsonObj.getObject("sensorList").toString()))
-						socket.write("200\n");
-					else
-						throw new NodeException(401, "Invalid session ID.");
+					if (jsonObj.getObject("sensorList") != null)
+						nodeManager.updateSensorValue(nodeID, sessionID, jsonObj.getObject("sensorList"));
+					if (jsonObj.getObject("actuatorList") != null)
+						nodeManager.updateActuatorValue(nodeID, sessionID, jsonObj.getObject("actuatorList"));
+					
+					socket.write("200\n");
 		
 					break;
 				case 5 :
@@ -368,6 +542,8 @@ public class ServerMain {
 					// error!
 					throw new NodeException(400);
 				}
+			}else {
+				throw new NodeException(400);
 			}
 			break;
 		}
@@ -377,6 +553,18 @@ public class ServerMain {
 			e.printStackTrace();
 			socket.write(e.getMessage() + "\n");
 		}		
+	}
+	
+	static boolean sendToNode(String nodeID, String url, String json, HttpServerRequest req, boolean isResponseNeeded) {
+		NetSocket socket = nodeSocketMap.get(nodeID);
+		
+		if (socket == null)
+			return false;
+		
+		requestToNodeMap.put(socket, new RequestToNode(nodeID, req, isResponseNeeded, url, json));
+		nodeSocketMap.get(nodeID).write(url + " " + json + "\n");
+		
+		return true;
 	}
 }
 
@@ -437,3 +625,30 @@ class ControllerException extends Exception {
 		this.errorCode = errorCode;
 	}
 }
+
+class RequestToNode {
+	String nodeID;
+	HttpServerRequest controllerReq;
+	boolean isResponseNeeded;
+	String url;
+	String param;
+
+//	public RequestToNode(String nodeID, HttpServerRequest controllerReq,
+//			boolean isResponseNeeded) {
+//		super();
+//		this.nodeID = nodeID;
+//		this.controllerReq = controllerReq;
+//		this.isResponseNeeded = isResponseNeeded;
+//	}
+
+	public RequestToNode(String nodeID, HttpServerRequest controllerReq,
+			boolean isResponseNeeded, String url, String param) {
+		super();
+		this.nodeID = nodeID;
+		this.controllerReq = controllerReq;
+		this.isResponseNeeded = isResponseNeeded;
+		this.url = url;
+		this.param = param;
+	}
+}
+

@@ -1,22 +1,32 @@
 package com.joyl.iotserver;
 
-public class SANodeSession {
+import org.vertx.java.core.json.JsonObject;
+
+public class SANodeSession  extends Session {
 	private SANode node;
-	private String sessionID;
-	private long lastHeartbeat;	// time in milliseconds
-	private String lastSensorValue;
+//	private String sessionID;
+//	private long lastHeartbeat;	// time in milliseconds
+	private JsonObject lastSensorValue;	// sensor value in Json String
+	private JsonObject lastActuatorValue;	// actuator value in Json String
 
 	public SANodeSession(SANode node, String sessionID) {
 		// TODO Auto-generated constructor stub
 		this.node = node;
 		this.sessionID = sessionID;
 		lastHeartbeat = System.currentTimeMillis();
+
+		if (this.node.haveSensor())
+			lastSensorValue = new JsonObject();
+		else 
+			lastSensorValue = null;
+		
+		if (this.node.haveActuator())
+			lastActuatorValue = new JsonObject();
+		else 
+			lastActuatorValue = null;
+		
 	}
 	
-	public String getSessionID() {
-		return sessionID;
-	}
-
 	public SANode getNode() {
 		return node;
 	}
@@ -25,24 +35,38 @@ public class SANodeSession {
 		this.lastHeartbeat = lastHeartbeat;
 	}
 	
-	public void setLastSensorValue(String lastSensorValue) {
-		this.lastSensorValue = lastSensorValue;
+	public void setLastSensorValue(JsonObject lastSensorValue) {
+		if (this.lastSensorValue == null)
+			return;
+		
+		for (String sensorName : lastSensorValue.getFieldNames()) {
+			this.lastSensorValue.putString(sensorName, lastSensorValue.getString(sensorName));
+		}
+		
+		Logger.logSANodeValue(node.getID(), node.getName(), getLastSensorActuatorValueStr());
 	}
 
-	public boolean isValidSession(String sessionID) {
-		if (sessionID.equals(this.sessionID))
-			return true;
+	public void setLastActuatorValue(JsonObject lastActuatorValue) {
+		if (this.lastActuatorValue == null)
+			return;
 		
-		return false;
+		for (String actuatorName : lastActuatorValue.getFieldNames()) {
+			this.lastActuatorValue.putString(actuatorName, lastActuatorValue.getString(actuatorName));
+		}
+
+		Logger.logSANodeValue(node.getID(), node.getName(), getLastSensorActuatorValueStr());
 	}
-	
-	public boolean isAlive(long sessionTimeout) {
-		if (sessionID == null || lastHeartbeat == 0)
-			return false;
+
+	public String getLastSensorActuatorValueStr() {
+		JsonObject jsonObj = new JsonObject();
 		
-		if ( (System.currentTimeMillis() - lastHeartbeat) > sessionTimeout)
-			return false;
+		if (lastSensorValue != null)
+			jsonObj.putObject("sensorList", lastSensorValue);
+
+		if (lastActuatorValue != null)
+			jsonObj.putObject("actuatorList", lastActuatorValue);
 		
-		return true;
+		return jsonObj.toString();
 	}
+
 }

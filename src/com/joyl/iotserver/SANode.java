@@ -65,5 +65,19 @@ public class SANode {
 	public String getActivationCode() {
 		return activationCode;
 	}
+	
+	public boolean haveSensor() {
+		if (jsonObj.getObject("sensorList") == null)
+			return false;
+		
+		return true;
+	}
+	
+	public boolean haveActuator() {
+		if (jsonObj.getObject("actuatorList") == null)
+			return false;
+		
+		return true;
+	}
 }
 

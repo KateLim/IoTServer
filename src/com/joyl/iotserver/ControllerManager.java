@@ -5,7 +5,7 @@ import java.util.HashMap;
 public class ControllerManager {
 	// TODO This is temporal implementation. need to improve to REAL session ID
 	private static final String SESSIONIDBASE = "coJlwhi12ofA";
-	private static int sessionNum = 0;
+	private static int sessionIdx = 0;
 
 	private HashMap<String, ControllerSession> controllerList = new HashMap<String, ControllerSession>();	// Activated & Connected Node List
 
@@ -14,7 +14,7 @@ public class ControllerManager {
 	}
 	
 	private String generateSessionID() {
-		String sessionID =  SESSIONIDBASE + sessionNum++;
+		String sessionID =  SESSIONIDBASE + sessionIdx++;
 		
 		return sessionID;
 	}
@@ -26,10 +26,18 @@ public class ControllerManager {
 		return sessionID;
 	}
 	
-	public boolean isValidSessionID(String sessionID) {
-		if (controllerList.get(sessionID) == null)
-			return false;
+	public boolean validateSession(String sessionID) {
+		if (!controllerList.containsKey(sessionID))
+		return false;
 		
+		controllerList.get(sessionID).updateSession();
 		return true;
+	}
+
+	public void removeOldSession(long timeDurationMillis) {
+		for (String sessionID : controllerList.keySet()) {
+			if (!controllerList.get(sessionID).isAlive(timeDurationMillis))
+				controllerList.remove(sessionID);			
+		}
 	}
 }
