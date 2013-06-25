@@ -60,6 +60,7 @@ public class IPList {
 	  	int oct4start, oct4finish;						// The forth IP octet range (starting/ending IP addresses)
 	  	int one, two, three, four;						// The four octets. These are used as loop indexes
 	  	int octet;										// A single octet
+	  	byte octecbyte;									// for byte-wise operation
 	   	String myIpAddr = null;							// This application's IP address
 	   	String mySubnetMask = null;						// The subnet mask this application is running on
 	   	String searchIpAddr = null;						// The IP address to scan
@@ -88,7 +89,15 @@ public class IPList {
 	    				System.out.println("prefixLength : " + address.getNetworkPrefixLength());
 
 	                    myIpAddr = inetAddress.getHostAddress().toString();
-	                    mySubnetMask = getIPv4LocalNetMask(inetAddress, address.getNetworkPrefixLength());
+	                    
+	                    // for windows - getNetworkPrefixLength has problem of finding subnetmask.
+	                    mySubnetMask = GetSubnetMask();
+	                    if( mySubnetMask == null)
+	                    {
+	                    	// for MAC
+		                    //mySubnetMask = getIPv4LocalNetMask(inetAddress, address.getNetworkPrefixLength());
+	                    	mySubnetMask = getIPv4LocalNetMask(inetAddress, address.getNetworkPrefixLength());
+	                    }
 	                    break;
                     }
    					//System.out.println("Address: " + address);
@@ -133,7 +142,8 @@ public class IPList {
 
 	  		default:									// Partial mask
 				oct1start = 0;
-				oct1finish = octet;
+				octecbyte = (byte)octet;
+				oct1finish = ((byte) ~octecbyte | GetOctet(1,  myIpAddr)) + 1;
 		}
 
 		/***********************************************************************************************************
@@ -155,8 +165,9 @@ public class IPList {
 	  			break;
 
 	  		default:									// Partial mask
-				oct2start = 0;
-				oct2finish = octet;
+				oct2start = octet & GetOctet(2,  myIpAddr);
+				octecbyte = (byte)octet;
+				oct2finish = ((byte) ~octecbyte | GetOctet(2,  myIpAddr)) + 1;
 		}
 
 		/***********************************************************************************************************
@@ -178,8 +189,9 @@ public class IPList {
 	  			break;
 
 	  		default:									// Partial mask
-				oct3start = 0;
-				oct3finish = octet;
+				oct3start = octet & GetOctet(3,  myIpAddr);
+				octecbyte = (byte)octet;
+				oct3finish = ((byte) ~octecbyte | GetOctet(3,  myIpAddr)) + 1;
 		}
 
 		/***********************************************************************************************************
@@ -196,13 +208,14 @@ public class IPList {
 	  			break;
 
 	  		case 0:										// All 255 Addresses
-	  			oct4start = 0;
+	  			oct4start = 1;
 	  			oct4finish = 255;
 	  			break;
 
 	  		default:									// Partial mask
-				oct4start = 0;
-				oct4finish = octet;
+				oct4start = octet & GetOctet(4,  myIpAddr);
+				octecbyte = (byte)octet;
+				oct4finish = ((byte) ~octecbyte | GetOctet(4,  myIpAddr)) + 1;
 		}
 
 		/***********************************************************************************************************
@@ -234,6 +247,7 @@ public class IPList {
 
 
 						ipAddrList.add(searchIpAddr);
+						System.out.println(searchIpAddr);
 //			   			tcList[i] = new TryConnect(searchIpAddr, portNum);
 //			   			tcList[i].start();
 
@@ -357,5 +371,54 @@ public class IPList {
 		return ipAddrList.size();
 	}
 
+	// current jdk has bug about get subnetmask... 
+	// This method is just for windows, not MAC... sorry.
+	// Subject: hg: jdk8/tl/jdk: 7107883: getNetworkPrefixLength() does not return	correct prefix length - msg#00437
+	static String GetSubnetMask()
+    {
+         try
+         {
+			// The following sets up the runtime to execute the ipconfig command
+            Runtime rt = Runtime.getRuntime();
+            Process pr = rt.exec("ipconfig");
+
+            // The following redirects the output of the above process (pr) to input
+            BufferedReader input = new BufferedReader(new InputStreamReader(pr.getInputStream()));
+
+            // The following strings hold the line of input from the process and the subnet mask string
+            String line = null;
+            String Mask = null;
+
+            // This is a loop flag
+            boolean found = false;
+
+            while( !found )
+            {
+	            line=input.readLine();
+
+	            if (line != null)
+	            {
+	            	// korea or english version check needed!
+	            	if ( line.indexOf( "Subnet Mask" ) >= 0 || ( line.indexOf( "서브넷 마스크" ) >= 0 ) )
+		            {
+		            	Mask = (line.substring(line.indexOf( ":" )+1 )).trim();
+						found = true;
+	            	}
+	            } else {
+
+		            System.out.println( "Subnet Mask not found.");
+	            }
+            }
+
+            return ( Mask );
+
+         } catch(Exception e) {
+
+	        System.out.println(e.toString());
+            e.printStackTrace();
+            return( null );
+         }
+
+  	} // GetSubnetMask
 
 } // class
