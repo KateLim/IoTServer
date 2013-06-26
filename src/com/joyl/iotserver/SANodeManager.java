@@ -162,14 +162,15 @@ public class SANodeManager {
 		if (!node.getActivationCode().equals(activationCode))
 			return false;
 		
-		waitingNodeList.remove(nodeID);
-		
+		System.out.println("++++MOVE TO CONNECTED LIST++++++" + node.getDescriptionJsonStr());
 		node.setStatus(NodeStatus.ACTIVATED);
 //		connectedNodeList.put(nodeID, new SANodeSession(node, generateSessionID()));
 		// IMPORTANT session ID is not automatically generated but use Activation Code for temporal implementation
 		connectedNodeList.put(nodeID, new SANodeSession(node, node.getActivationCode()));
 				
 		activatedIDList.add(nodeID);
+
+		waitingNodeList.remove(nodeID);
 		
 		return true;
 	}

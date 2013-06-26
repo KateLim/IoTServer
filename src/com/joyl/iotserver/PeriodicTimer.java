@@ -39,6 +39,7 @@ public class PeriodicTimer extends Thread {
 			Logger.removeOldLog(logTimeout);
 			controllerManager.removeOldSession(controllerSessionTimeout);
 			sanodeManager.removeOldSession(sanodeSessionTimeout);
+//			System.out.println("PeriodicTimer");
 		}
 	}
 

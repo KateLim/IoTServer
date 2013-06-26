@@ -1,5 +1,6 @@
 package com.joyl.iotserver;
 
+import java.net.UnknownHostException;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
@@ -16,6 +17,12 @@ import org.vertx.java.core.json.JsonObject;
 import org.vertx.java.core.net.NetSocket;
 import org.vertx.java.core.parsetools.RecordParser;
 
+import com.mongodb.BasicDBObjectBuilder;
+import com.mongodb.DB;
+import com.mongodb.DBCollection;
+import com.mongodb.DBObject;
+import com.mongodb.MongoClient;
+
 
 public class ServerMain {
 	static final String VERSION = "1.0";
@@ -29,6 +36,10 @@ public class ServerMain {
 	
 	static ConcurrentHashMap<NetSocket, RequestToNode> requestToNodeMap = new ConcurrentHashMap<NetSocket, RequestToNode>();
 
+//	static Logger logger;
+	
+	static DBCollection collConfig;
+	
 	/**
 	 * @param args
 	 */
@@ -36,19 +47,25 @@ public class ServerMain {
 		
 		ServerMain serverMain = new ServerMain();
 
+		System.out.println("started");
+		
+		connectToDatabase();
+
+		// Start to receive request from Controller and SANode
+		Vertx vertx = VertxFactory.newVertx("localhost");
+		
+		// Request handler for Controller
 		RouteMatcher rm = new RouteMatcher();
 		initializeRouteMatcher(rm);
 
-		System.out.println("started");
-		Vertx vertx = VertxFactory.newVertx("localhost");
 		vertx.createHttpServer().requestHandler(rm)
 //			.setSSL(true).setKeyStorePath("server-keystore.jks").setKeyStorePassword("wibble")
 			.listen(50001);
 
+		// Request handler for SANode
 		vertx.createNetServer().connectHandler(new Handler<NetSocket>() {
 			public void handle(final NetSocket socket) {
 		        socket.dataHandler(RecordParser.newDelimited("\n", new Handler<Buffer>() {
-//			socket.dataHandler(new Handler<Buffer>() {
 					public void handle(Buffer buffer) {
 						// handling request from SANode
 						handleNodeRequest(socket, buffer);
@@ -71,10 +88,50 @@ public class ServerMain {
 				});
 			}
 		}).listen(50000);
-		
+
+		// Set Periodic timer to manage Controller/SANode session and old logs
 		long timeoutDuration = 72*60*60*1000;	// 72 hours
 		new PeriodicTimer(timeoutDuration, timeoutDuration, timeoutDuration,
 				controllerManager, nodeManager); 
+	}
+
+	private static void connectToDatabase() {
+		// Connect to DB for logs, settings
+		try {
+			MongoClient mongoClient = new MongoClient( "localhost" , 27017 );
+			DB db = mongoClient.getDB( "IoTDB" );
+
+			// DB Collection for log
+			DBCollection collection;
+			if (db.collectionExists("log")) {
+		        collection = db.getCollection("log");
+		    } else {
+		        DBObject options = BasicDBObjectBuilder.start()
+		        		.add("capped", false)
+//		        		.add("capped", true)
+//		        		.add("size", 100000)
+		        		.get();
+		        collection = db.createCollection("log", options);
+		    }
+				
+			Logger.setCollLog(collection);
+
+			// DB Collection for storing activated SA Node List
+			
+			if (db.collectionExists("config")) {
+				collConfig = db.getCollection("config");
+		    } else {
+		        DBObject options = BasicDBObjectBuilder.start()
+		        		.add("capped", false)
+//		        		.add("capped", true)
+//		        		.add("size", 100000)
+		        		.get();
+		        collConfig = db.createCollection("config", options);
+		    }
+		} catch (UnknownHostException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
 	}
 
 	static private void initializeRouteMatcher(RouteMatcher rm) {
@@ -292,8 +349,15 @@ public class ServerMain {
 					if (sessionID == null || !controllerManager.validateSession(sessionID)) {
 						throw new ControllerException(401);
 					}
+
+					String nodeID = req.params().get("nodeid");
+
+					if (!nodeManager.isConnectedNode(nodeID)) {
+						throw new ControllerException(404);
+					}
+
 					// get waiting List
-					String nodeInfoStr = nodeManager.getNodeValueJsonStr(req.params().get("nodeid"));
+					String nodeInfoStr = nodeManager.getNodeValueJsonStr(nodeID);
 					
 					respondToController(req, 200, nodeInfoStr);
 				} catch (ControllerException e) {
@@ -316,19 +380,20 @@ public class ServerMain {
 					
 					String nodeID = req.params().get("nodeid");
 					
-					// send to SANode
-					if (!sendToNode(nodeID, "/1.0/actuator", 
-							"{ \"" + req.params().get("actuator") + "\" : \"" + req.params().get("value") + "\" }", 
-							req, false))
+					if (!nodeManager.isConnectedNode(nodeID)) {
 						throw new ControllerException(404);
+					}
+
+					// send to SANode
+					sendToNode(nodeID, "/1.0/actuator", 
+							"{ \"" + req.params().get("actuator") + "\" : \"" + req.params().get("value") + "\" }", 
+							req, true);
 //					respondToController(req, 200, nodeInfoStr);
 				} catch (ControllerException e) {
 					// TODO Auto-generated catch block
 					e.printStackTrace();
 					respondToController(req, e.errorCode, e.getMessage());
 				}
-				// initial connection
-//				respondToController(req);
 			}
 		});
 
@@ -376,6 +441,21 @@ public class ServerMain {
 		});
 	}
 
+	static private String requestToJson(HttpServerRequest req) {
+		JsonObject resJson = new JsonObject();
+		JsonObject param = new JsonObject();
+
+		resJson.putString("URL", req.uri());
+		resJson.putString("method", req.method());
+
+		for (String query : req.params().names()) {
+			param.putString(query, req.params().get(query));
+		}
+		resJson.putObject("params", param);
+		
+		return resJson.encode();
+	}
+	
 	static private void printRequest(HttpServerRequest req) {
 		System.out.println("requestUri : "+ req.uri());
 		System.out.println("remoteAddress : "+ req.remoteAddress());
@@ -390,11 +470,6 @@ public class ServerMain {
 	}
 	
 	static private void respondToController(HttpServerRequest req, int statusCode) {
-//		printRequest(req);
-//		
-//		req.response().setStatusCode(statusCode);
-//		req.response().headers().add("Content-Type", "json; charset=UTF-8");
-//		req.response().end();
 		respondToController(req, statusCode, "");
 	}
 
@@ -406,6 +481,8 @@ public class ServerMain {
 		req.response().end(jsonStr);
 		
 		System.out.println(statusCode + " : " + jsonStr);
+		
+		Logger.logControllerCommand(requestToJson(req), statusCode, jsonStr);
 	}
 	
 	static private void respondToController(HttpServerRequest req) {
@@ -423,19 +500,6 @@ public class ServerMain {
 		resJson.putArray("requestParams", resParamsArr);
 
 		respondToController(req, 200, resJson.toString());
-		
-//		System.out.println(resJson.toString());
-//		System.out.println("Headers are: ");
-//		for (String key : req.headers().names()) {
-//			System.out.println(key + ":" + req.headers().get(key));
-//		}
-//		req.response().headers().add("Content-Type", "json; charset=UTF-8");
-//		req.response().end(resJson.toString());
-		// .end("{ \"request_uri\" : \"" + req.uri() + "\" ," +
-		// " \"response\" : { \"test_array\" : [{ \"a\" : \"b\", \"c\" : \"d\" }, { \"e\" : \"f\"}]}}");
-		// String file = req.path().equals("/") ? "index.html" :
-		// req.path();
-		// req.response().sendFile("webroot/" + file);
 	}
 	
 	static void handleNodeRequest(final NetSocket socket, Buffer buffer) {
@@ -466,16 +530,19 @@ public class ServerMain {
 					respondToController(requestToNode.controllerReq, 200);
 					break;
 				}
+				// TODO Add Controller Command Log
 			}
 			break;
 		case "500" :
 			if (requestToNode != null && requestToNode.isResponseNeeded) {
 				respondToController(requestToNode.controllerReq, 500, jsonStr);
+				// TODO Add Controller Command Log
 			}
 			break;
 		case "400" :
 			if (requestToNode != null && requestToNode.isResponseNeeded) {
 				respondToController(requestToNode.controllerReq, 500, jsonStr);
+				// TODO Add Controller Command Log
 			}
 			break;
 		case "/" + VERSION + "/sanode" :	
@@ -580,6 +647,7 @@ class NodeException extends Exception {
 		errorStr.put(400, "Bad request");
 		errorStr.put(401, "Not activated SA Node");
 		errorStr.put(403, "SA Node is in blacklist");
+		errorStr.put(404, "Requested SA Node not found");
 		errorStr.put(500, "Internal server failure");
 
         ERRORSTR = Collections.unmodifiableMap(errorStr);
