@@ -445,7 +445,7 @@ public class ServerMain {
 		JsonObject resJson = new JsonObject();
 		JsonObject param = new JsonObject();
 
-		resJson.putString("URL", req.uri());
+		resJson.putString("URL", req.path());
 		resJson.putString("method", req.method());
 
 		for (String query : req.params().names()) {
