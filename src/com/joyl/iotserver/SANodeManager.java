@@ -53,8 +53,8 @@ public class SANodeManager {
 			// IMPORTANT session ID is not automatically generated but use Activation Code for temporal implementation
 			SANodeSession nodeSession = new SANodeSession(node, node.getActivationCode());
 			connectedNodeList.put(node.getID(), nodeSession);
-		}else if (isInBlockedList(node.getID())) {
-			node.setStatus(NodeStatus.BLOCKED);
+//		}else if (isInBlockedList(node.getID())) {
+//			node.setStatus(NodeStatus.BLOCKED);
 		}else {
 			node.setStatus(NodeStatus.WAITING);
 			waitingNodeList.put(node.getID(), node);

@@ -28,8 +28,8 @@ public class ServerMain {
 	static final String VERSION = "1.5";
 	static final String LOGCOLLNAME = "log15";
 	static final String CFGCOLLNAME = "config15";
-	static final int SANODEPORT = 50002;
-	static final int CONTROLLERPORT = 50003;
+	static final int SANODEPORT = 50000;
+	static final int CONTROLLERPORT = 50001;
 //	static final String ACTIVATIONCODE = "HBKK5Q7";
 //	static String password = null;
 		
