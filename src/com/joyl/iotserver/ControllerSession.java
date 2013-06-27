@@ -1,7 +1,5 @@
 package com.joyl.iotserver;
 
-import java.util.ArrayList;
-
 public class ControllerSession extends Session {
 	String userID;
 

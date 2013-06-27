@@ -16,14 +16,7 @@ public class SANodeManager {
 	private HashMap<String, SANodeSession> connectedNodeList = new HashMap<String, SANodeSession>();	// Activated & Connected Node List
 	private HashMap<String, SANode> waitingNodeList = new HashMap<String, SANode>();	// Not activated but connected Node List
 	
-	private ArrayList<String> activatedIDList = new ArrayList<String>();	// Activated ID List from DB
-	private ArrayList<String> blockedIDList = new ArrayList<String>();	// Blocked ID List from DB
-	
 	public SANodeManager() {
-		// TODO Auto-generated constructor stub
-		// TODO Read activated ID List and blocked ID List from DB
-		activatedIDList.add("abcd");
-		blockedIDList.add("efgh");
 	}
 
 	private boolean isInActivatedList(String nodeID) {
@@ -32,10 +25,6 @@ public class SANodeManager {
 //		return activatedIDList.contains(nodeID);
 	}
 
-	private boolean isInBlockedList(String nodeID) {
-		return blockedIDList.contains(nodeID);
-	}
-	
 	private String generateSessionID() {
 		String sessionID =  SESSIONIDBASE + sessionNum++;
 		
@@ -53,8 +42,6 @@ public class SANodeManager {
 			// IMPORTANT session ID is not automatically generated but use Activation Code for temporal implementation
 			SANodeSession nodeSession = new SANodeSession(node, node.getActivationCode());
 			connectedNodeList.put(node.getID(), nodeSession);
-//		}else if (isInBlockedList(node.getID())) {
-//			node.setStatus(NodeStatus.BLOCKED);
 		}else {
 			node.setStatus(NodeStatus.WAITING);
 			waitingNodeList.put(node.getID(), node);
@@ -167,27 +154,6 @@ public class SANodeManager {
 		return connectedIDList;
 	}
 
-//	public boolean moveNodeToConnectedList(String nodeID, String activationCode) {
-//		SANode node = waitingNodeList.get(nodeID);
-//		if (node == null)
-//			return false;
-//		
-//		if (!node.getActivationCode().equals(activationCode))
-//			return false;
-//		
-//		System.out.println("++++MOVE TO CONNECTED LIST++++++" + node.getDescriptionJsonObj());
-//		node.setStatus(NodeStatus.ACTIVATED);
-////		connectedNodeList.put(nodeID, new SANodeSession(node, generateSessionID()));
-//		// IMPORTANT session ID is not automatically generated but use Activation Code for temporal implementation
-//		connectedNodeList.put(nodeID, new SANodeSession(node, node.getActivationCode()));
-//				
-//		activatedIDList.add(nodeID);
-//
-//		waitingNodeList.remove(nodeID);
-//		
-//		return true;
-//	}
-
 	/**
 	 * @param nodeID
 	 * @return true if node is successfully moved to connected list or if node is already in connected list.
@@ -206,8 +172,6 @@ public class SANodeManager {
 		// IMPORTANT session ID is not automatically generated but use Activation Code for temporal implementation
 		connectedNodeList.put(nodeID, new SANodeSession(node, node.getActivationCode()));
 				
-		activatedIDList.add(nodeID);
-
 		waitingNodeList.remove(nodeID);
 		
 		return true;
@@ -262,7 +226,7 @@ public class SANodeManager {
 			if (session == null) {
 				waitingListArray.add(nodeID);
 			}else {
-				connectedListObj.putObject(nodeID, session.getNode().getDescriptionJsonObj());
+				connectedListObj.putObject(session.getNode().getName(), session.getNode().getDescriptionJsonObj());
 			}
 		}
 

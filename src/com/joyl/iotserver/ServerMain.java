@@ -95,7 +95,7 @@ public class ServerMain {
 
 		// Set Periodic timer to manage Controller/SANode session and old logs
 		long timeoutDuration = 72*60*60*1000;	// 72 hours
-		new PeriodicTimer(timeoutDuration, timeoutDuration, timeoutDuration,
+		new PeriodicTimer(timeoutDuration, 9000, timeoutDuration,
 				controllerManager, nodeManager); 
 	}
 
@@ -148,26 +148,6 @@ public class ServerMain {
 				respondToController(req, 200, "{ \"next\" : \"login\" }");
 			}
 		});
-
-//		// IC01. Activate Server
-//		rm.put("/" + VERSION + "/activation", new Handler<HttpServerRequest>() {
-//			public void handle(HttpServerRequest req) {
-//				try {
-//					String activationCode = req.params().get("activationCode"); 
-//							
-//					if (activationCode == null || !activationCode.equals(ACTIVATIONCODE)) {
-//						throw new ControllerException(400);
-//					}
-//					
-//					respondToController(req, 200, "{ \"next\" : \"password\" }");
-//
-//				} catch (ControllerException e) {
-//					// TODO Auto-generated catch block
-//					e.printStackTrace();
-//					respondToController(req, e.errorCode, e.getMessage());
-//				}
-//			}
-//		});
 
 		// IC01. Create Account
 		rm.put("/" + VERSION + "/account", new Handler<HttpServerRequest>() {
@@ -278,7 +258,7 @@ public class ServerMain {
 					// if node is in waiting list, move to connected list
 					if (nodeManager.moveNodeToConnectedList(nodeID)) {
 						respondToController(req, 200, "{ \"message\" : \"SA Node is added to connected list\"}");
-						sendToNode(nodeID, "/" + VERSION + "/activation", "{ \"sessionID\" : \"" + nodeManager.getSessionID(nodeID) + "\" }", req, false);
+						sendToNode(nodeID, "/" + VERSION + "/activation", "{\"sessionID\":\"" + nodeManager.getSessionID(nodeID) + "\"}", req, false);
 					}else {
 						respondToController(req, 200, "{ \"message\" : \"SA Node is added to waiting list\"}");
 					}
@@ -349,20 +329,12 @@ public class ServerMain {
 					
 					// Remove nodeID from user's activation list
 					ConfigManager.removeNodeFromAccount(controllerManager.getUserID(sessionID), nodeID);
-					
-					// if node is in waiting list, move to connected list
-					if (nodeManager.moveNodeToWaitingList(nodeID)) {
-						respondToController(req, 200, "{ \"message\" : \"SA Node is removed from connected list\"}");
-						sendToNode(nodeID, "/" + VERSION + "/deactivation", "{ \"sessionID\" : \"" + nodeManager.getSessionID(nodeID) + "\" }", req, false);
-					}else {
-						respondToController(req, 200, "{ \"message\" : \"SA Node is removed from waiting list\"}");
-					}
 
-					// If none of user are interested in node, deactivate node.
-					if (!ConfigManager.isNodeRegistered(nodeID)) {
-						sendToNode(nodeID, "/" + VERSION + "/deactivation", "{ \"sessionID\" : \"" + nodeManager.getSessionID(nodeID) + "\" }", req, false);
-						// TODO deactivate node //move to waiting list
-						
+					respondToController(req, 200, "{ \"message\" : \"SA Node is removed from connected list\"}");
+					
+					// If none of user are interested in node and node is in connected list, move to waiting list
+					if ((!ConfigManager.isNodeRegistered(nodeID)) && nodeManager.moveNodeToWaitingList(nodeID)) {
+						sendToNode(nodeID, "/" + VERSION + "/deactivation", "{\"sessionID\":\"" + nodeManager.getSessionID(nodeID) + "\"}", req, false);
 					}
 				} catch (ControllerException e) {
 					// TODO Auto-generated catch block
@@ -410,6 +382,8 @@ public class ServerMain {
 		// IC12. Handle SA Node
 		rm.put("/" + VERSION + "/nodelist/connected/:nodeid/:actuator", new Handler<HttpServerRequest>() {
 			public void handle(HttpServerRequest req) {
+				printRequest(req);
+				
 				try {
 					String sessionID = req.params().get("sessionID");
 					
@@ -430,7 +404,7 @@ public class ServerMain {
 
 					// send to SANode
 					sendToNode(nodeID, "/" + VERSION + "/actuator", 
-							"{ \"" + req.params().get("actuator") + "\" : \"" + req.params().get("value") + "\" }", 
+							"{\"" + req.params().get("actuator") + "\":\"" + req.params().get("value") + "\"}", 
 							req, true);
 				} catch (ControllerException e) {
 					// TODO Auto-generated catch block
@@ -477,6 +451,8 @@ public class ServerMain {
 		// Catch all - serve the index page
 		rm.getWithRegEx(".*", new Handler<HttpServerRequest>() {
 			public void handle(HttpServerRequest req) {
+				printRequest(req);
+				System.out.println("404 ERROR!!");
 				req.response().sendFile("route_match/index.html");
 			}
 		});

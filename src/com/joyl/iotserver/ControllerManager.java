@@ -1,6 +1,5 @@
 package com.joyl.iotserver;
 
-import java.util.ArrayList;
 import java.util.HashMap;
 
 public class ControllerManager {
