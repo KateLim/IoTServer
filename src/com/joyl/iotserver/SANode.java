@@ -26,7 +26,7 @@ public class SANode {
 		status = NodeStatus.WAITING;
 	}
 	
-	public String getDescriptionJsonStr() {
+	public JsonObject getDescriptionJsonObj() {
 		JsonObject descJsonObj = new JsonObject();
 		
 		descJsonObj.putString("nodeID", ID);
@@ -43,7 +43,7 @@ public class SANode {
 			descJsonObj.putObject("actuatorList", actuatorListObj);
 		}
 		
-		return descJsonObj.toString();
+		return descJsonObj;
 	}
 
 	public NodeStatus getStatus() {

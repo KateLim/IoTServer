@@ -36,16 +36,41 @@ public class Logger {
 		jsonObj.putString("nodeID", nodeID);
 		jsonObj.putString("nodeName", nodeName);
 		jsonObj.putObject("data", new JsonObject(nodeValue));
+		jsonObj.putArray("users", ConfigManager.getRegisteredUserIDList(nodeID));
 
 		collLog.insert(jsonToDBObject(jsonObj));
 	}
 
 	public static void logControllerCommand(String request, int statusCode, String respond) {
+		logControllerCommand(request, statusCode, respond, null);
+//		JsonObject jsonObj = new JsonObject();
+//		Long timestamp = System.currentTimeMillis();
+//
+//		jsonObj.putNumber("time", timestamp);
+//		jsonObj.putString("type", "Controller");
+//		jsonObj.putObject("request", new JsonObject(request));
+//
+//		JsonObject resJsonObj = new JsonObject();
+//		resJsonObj.putString("code", "" + statusCode);
+//		if (respond != null && respond.length() != 0) {
+//			if (respond.length() > 1024)
+//				resJsonObj.putString("data", "deprecated because too long");
+//			else
+//				resJsonObj.putObject("data", new JsonObject(respond));
+//		}
+//		
+//		jsonObj.putObject("resonse", resJsonObj);
+//		collLog.insert(jsonToDBObject(jsonObj));
+	}
+
+	public static void logControllerCommand(String request, int statusCode, String respond, String userID) {
 		JsonObject jsonObj = new JsonObject();
 		Long timestamp = System.currentTimeMillis();
 
 		jsonObj.putNumber("time", timestamp);
 		jsonObj.putString("type", "Controller");
+		if (userID != null)
+			jsonObj.putString("userID", userID);
 		jsonObj.putObject("request", new JsonObject(request));
 
 		JsonObject resJsonObj = new JsonObject();
@@ -75,6 +100,32 @@ public class Logger {
 	public static String getLogList() {
 		DBCursor cursor = collLog.find(null, (DBObject) JSON.parse("{ _id : 0, nodeID : 0 }")).sort(
 				(DBObject) JSON.parse("{ time : -1 }"));
+
+		JsonArray logArray = new JsonArray();
+
+		try {
+			while (cursor.hasNext()) {
+				String data = cursor.next().toString();
+				JsonObject jsonObj = new JsonObject(data);
+				System.out.println(data);
+				logArray.addObject(jsonObj);
+			}
+		} finally {
+			cursor.close();
+		}
+
+		JsonObject logList = new JsonObject();
+		logList.putArray("log", logArray);
+
+		return logList.encode();
+	}
+
+	public static String getLogList(String userID) {
+		
+		DBCursor cursor = collLog.find(
+				(DBObject) JSON.parse("{ $or : [ { userID : \"" + userID + "\"}, {users: \"" + userID + "\" }]}"), 
+				(DBObject) JSON.parse("{ _id : 0, nodeID : 0, users : 0 }"))
+				.sort((DBObject) JSON.parse("{ time : -1 }"));
 
 		JsonArray logArray = new JsonArray();
 

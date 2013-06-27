@@ -3,6 +3,7 @@ package com.joyl.iotserver;
 import java.util.ArrayList;
 import java.util.HashMap;
 
+import org.vertx.java.core.json.JsonArray;
 import org.vertx.java.core.json.JsonObject;
 
 import com.joyl.iotserver.SANode.NodeStatus;
@@ -26,7 +27,9 @@ public class SANodeManager {
 	}
 
 	private boolean isInActivatedList(String nodeID) {
-		return activatedIDList.contains(nodeID);
+		// TODO must check whether user registered this id no not
+		return ConfigManager.isNodeRegistered(nodeID);
+//		return activatedIDList.contains(nodeID);
 	}
 
 	private boolean isInBlockedList(String nodeID) {
@@ -125,7 +128,7 @@ public class SANodeManager {
 				nodeListJsonStr += ", ";
 			
 			SANode node = waitingNodeList.get(nodeID);
-			nodeListJsonStr += "\"" + node.getName() + "\" : " + node.getDescriptionJsonStr();
+			nodeListJsonStr += "\"" + node.getName() + "\" : " + node.getDescriptionJsonObj().encode();
 		}
 		nodeListJsonStr += "}";
 		
@@ -147,22 +150,50 @@ public class SANodeManager {
 				nodeListJsonStr += ", ";
 			
 			SANode node = connectedNodeList.get(nodeID).getNode();
-			nodeListJsonStr += "\"" + node.getName() + "\" : " + node.getDescriptionJsonStr();
+			nodeListJsonStr += "\"" + node.getName() + "\" : " + node.getDescriptionJsonObj().encode();
 		}
 		nodeListJsonStr += "}";
 		
 		return nodeListJsonStr;
 	}
 	
-	public boolean moveNodeToConnectedList(String nodeID, String activationCode) {
+	public ArrayList<String> getConnectedList() {
+		ArrayList<String> connectedIDList = new ArrayList<String>();
+		
+		for (String nodeID : connectedNodeList.keySet()) {
+			connectedIDList.add(nodeID);
+		}
+		
+		return connectedIDList;
+	}
+
+//	public boolean moveNodeToConnectedList(String nodeID, String activationCode) {
+//		SANode node = waitingNodeList.get(nodeID);
+//		if (node == null)
+//			return false;
+//		
+//		if (!node.getActivationCode().equals(activationCode))
+//			return false;
+//		
+//		System.out.println("++++MOVE TO CONNECTED LIST++++++" + node.getDescriptionJsonObj());
+//		node.setStatus(NodeStatus.ACTIVATED);
+////		connectedNodeList.put(nodeID, new SANodeSession(node, generateSessionID()));
+//		// IMPORTANT session ID is not automatically generated but use Activation Code for temporal implementation
+//		connectedNodeList.put(nodeID, new SANodeSession(node, node.getActivationCode()));
+//				
+//		activatedIDList.add(nodeID);
+//
+//		waitingNodeList.remove(nodeID);
+//		
+//		return true;
+//	}
+
+	public boolean moveNodeToConnectedList(String nodeID) {
 		SANode node = waitingNodeList.get(nodeID);
 		if (node == null)
 			return false;
 		
-		if (!node.getActivationCode().equals(activationCode))
-			return false;
-		
-		System.out.println("++++MOVE TO CONNECTED LIST++++++" + node.getDescriptionJsonStr());
+		System.out.println("++++MOVE TO CONNECTED LIST++++++" + node.getDescriptionJsonObj());
 		node.setStatus(NodeStatus.ACTIVATED);
 //		connectedNodeList.put(nodeID, new SANodeSession(node, generateSessionID()));
 		// IMPORTANT session ID is not automatically generated but use Activation Code for temporal implementation
@@ -174,7 +205,7 @@ public class SANodeManager {
 		
 		return true;
 	}
-
+	
 	public String getNodeValueJsonStr(String nodeID) {
 		SANodeSession session = connectedNodeList.get(nodeID);
 		
@@ -189,5 +220,32 @@ public class SANodeManager {
 			if (!connectedNodeList.get(nodeID).isAlive(timeDurationMillis))
 				connectedNodeList.remove(nodeID);			
 		}
+	}
+	
+	public String getNodeListStrbyUserID(String userID, boolean generateWaitingList, boolean generateConnectedList) {
+		ArrayList<String> registeredNodeIDList = ConfigManager.getRegisteredNodeIDList(userID);
+
+		JsonObject connectedListObj = new JsonObject();
+		JsonArray waitingListArray = new JsonArray();
+		
+		for (String nodeID : registeredNodeIDList) {
+			SANodeSession session = connectedNodeList.get(nodeID);
+			
+			if (session == null) {
+				waitingListArray.add(nodeID);
+			}else {
+				connectedListObj.putObject(nodeID, session.getNode().getDescriptionJsonObj());
+			}
+		}
+
+		JsonObject nodeList = new JsonObject();
+
+		if (generateWaitingList)
+			nodeList.putArray("waitingList", waitingListArray);
+		
+		if (generateConnectedList)
+			nodeList.putObject("connectedList", connectedListObj);
+		
+		return nodeList.encode();
 	}
 }

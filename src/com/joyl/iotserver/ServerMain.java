@@ -25,9 +25,13 @@ import com.mongodb.MongoClient;
 
 
 public class ServerMain {
-	static final String VERSION = "1.0";
-	static final String ACTIVATIONCODE = "HBKK5Q7";
-	static String password = null;
+	static final String VERSION = "1.5";
+	static final String LOGCOLLNAME = "log15";
+	static final String CFGCOLLNAME = "config15";
+	static final int SANODEPORT = 50002;
+	static final int CONTROLLERPORT = 50003;
+//	static final String ACTIVATIONCODE = "HBKK5Q7";
+//	static String password = null;
 		
 	static ControllerManager controllerManager = new ControllerManager();
 	
@@ -60,7 +64,7 @@ public class ServerMain {
 
 		vertx.createHttpServer().requestHandler(rm)
 //			.setSSL(true).setKeyStorePath("server-keystore.jks").setKeyStorePassword("wibble")
-			.listen(50001);
+			.listen(CONTROLLERPORT);
 
 		// Request handler for SANode
 		vertx.createNetServer().connectHandler(new Handler<NetSocket>() {
@@ -87,7 +91,7 @@ public class ServerMain {
 					}
 				});
 			}
-		}).listen(50000);
+		}).listen(SANODEPORT);
 
 		// Set Periodic timer to manage Controller/SANode session and old logs
 		long timeoutDuration = 72*60*60*1000;	// 72 hours
@@ -103,31 +107,33 @@ public class ServerMain {
 
 			// DB Collection for log
 			DBCollection collection;
-			if (db.collectionExists("log")) {
-		        collection = db.getCollection("log");
+			if (db.collectionExists(LOGCOLLNAME)) {
+		        collection = db.getCollection(LOGCOLLNAME);
 		    } else {
 		        DBObject options = BasicDBObjectBuilder.start()
 		        		.add("capped", false)
 //		        		.add("capped", true)
 //		        		.add("size", 100000)
 		        		.get();
-		        collection = db.createCollection("log", options);
+		        collection = db.createCollection(LOGCOLLNAME, options);
 		    }
 				
 			Logger.setCollLog(collection);
 
 			// DB Collection for storing activated SA Node List
 			
-			if (db.collectionExists("config")) {
-				collConfig = db.getCollection("config");
+			if (db.collectionExists(CFGCOLLNAME)) {
+				collConfig = db.getCollection(CFGCOLLNAME);
 		    } else {
 		        DBObject options = BasicDBObjectBuilder.start()
 		        		.add("capped", false)
 //		        		.add("capped", true)
 //		        		.add("size", 100000)
 		        		.get();
-		        collConfig = db.createCollection("config", options);
+		        collConfig = db.createCollection(CFGCOLLNAME, options);
 		    }
+			
+			ConfigManager.setCollCfg(collConfig);
 		} catch (UnknownHostException e) {
 			// TODO Auto-generated catch block
 			e.printStackTrace();
@@ -139,25 +145,46 @@ public class ServerMain {
 		// IC00. Connection
 		rm.get("/" + VERSION + "/", new Handler<HttpServerRequest>() {
 			public void handle(HttpServerRequest req) {
-				if (password == null) {
-					respondToController(req, 200, "{ \"next\" : \"activation\" }");
-				}else {
-					respondToController(req, 200, "{ \"next\" : \"login\" }");
-				}
+				respondToController(req, 200, "{ \"next\" : \"login\" }");
 			}
 		});
 
-		// IC01. Activate Server
-		rm.put("/" + VERSION + "/activation", new Handler<HttpServerRequest>() {
+//		// IC01. Activate Server
+//		rm.put("/" + VERSION + "/activation", new Handler<HttpServerRequest>() {
+//			public void handle(HttpServerRequest req) {
+//				try {
+//					String activationCode = req.params().get("activationCode"); 
+//							
+//					if (activationCode == null || !activationCode.equals(ACTIVATIONCODE)) {
+//						throw new ControllerException(400);
+//					}
+//					
+//					respondToController(req, 200, "{ \"next\" : \"password\" }");
+//
+//				} catch (ControllerException e) {
+//					// TODO Auto-generated catch block
+//					e.printStackTrace();
+//					respondToController(req, e.errorCode, e.getMessage());
+//				}
+//			}
+//		});
+
+		// IC01. Create Account
+		rm.put("/" + VERSION + "/account", new Handler<HttpServerRequest>() {
 			public void handle(HttpServerRequest req) {
 				try {
-					String activationCode = req.params().get("activationCode"); 
+					String ID = req.params().get("ID");
+					String password = req.params().get("password");
 							
-					if (activationCode == null || !activationCode.equals(ACTIVATIONCODE)) {
+					if (ID == null || password == null) {
 						throw new ControllerException(400);
 					}
 					
-					respondToController(req, 200, "{ \"next\" : \"password\" }");
+					if (ConfigManager.addAccount(ID, password)) {
+						respondToController(req, 200, "{ \"next\" : \"login\" }");
+					}else {
+						throw new ControllerException(406);
+					}
 
 				} catch (ControllerException e) {
 					// TODO Auto-generated catch block
@@ -167,21 +194,19 @@ public class ServerMain {
 			}
 		});
 
-		// IC02. Set password
-		rm.put("/" + VERSION + "/password", new Handler<HttpServerRequest>() {
-			public void handle(HttpServerRequest req) {
-				printRequest(req);
-				
+		// IC02. Check Account Exist
+		rm.get("/" + VERSION + "/account", new Handler<HttpServerRequest>() {
+			public void handle(HttpServerRequest req) {				
 				try {
-					String password = req.params().get("password"); 
+					String ID = req.params().get("ID"); 
 					
-					if (password == null || ServerMain.password != null) {
+					if (ID == null) {
 						throw new ControllerException(400);
 					}
 					
-					ServerMain.password = password;
-					respondToController(req, 200, "{ \"next\" : \"login\" }");
-
+					// TODO check account is exist or not
+					
+					respondToController(req, 200);
 				} catch (ControllerException e) {
 					// TODO Auto-generated catch block
 					e.printStackTrace();
@@ -194,14 +219,16 @@ public class ServerMain {
 		rm.put("/" + VERSION + "/login", new Handler<HttpServerRequest>() {
 			public void handle(HttpServerRequest req) {
 				try {
-					String controllerID = req.params().get("controllerID");
+					String ID = req.params().get("ID");
 					String password = req.params().get("password"); 
 					
-					if (password == null || ServerMain.password == null || !ServerMain.password.equals(password)) {
+					if (ID == null || password == null) {
 						throw new ControllerException(400);
+					}else if (!ConfigManager.checkAccountIDPassword(ID, password)) {
+						throw new ControllerException(403);
 					}
 					
-					String sessionID = controllerManager.addNewSession(controllerID);
+					String sessionID = controllerManager.addNewSession(ID);
 					
 					respondToController(req, 200, "{ \"sessionID\" : \"" + sessionID +"\" }");
 	
@@ -222,24 +249,9 @@ public class ServerMain {
 					if (sessionID == null || !controllerManager.validateSession(sessionID)) {
 						throw new ControllerException(401);
 					}
-					// get waiting List
-					// get activated List
-					String waitingListStr = nodeManager.getWaitingListJsonStr();
-					String connectedListStr = nodeManager.getConnectedListJsonStr();
-					
-					String nodeListStr =  "{ ";
-					if (waitingListStr != null) {
-						nodeListStr += waitingListStr;
-						
-						if (connectedListStr != null)
-							nodeListStr += ",";
-					}
-					
-					if (connectedListStr != null)
-						nodeListStr += connectedListStr;
-					
-					nodeListStr += "}";
-							
+
+					String nodeListStr = nodeManager.getNodeListStrbyUserID(controllerManager.getUserID(sessionID), true, true);
+
 					respondToController(req, 200, nodeListStr);
 				} catch (ControllerException e) {
 					// TODO Auto-generated catch block
@@ -256,23 +268,21 @@ public class ServerMain {
 				try {
 					String nodeID = req.params().get("nodeid");
 					String sessionID = req.params().get("sessionID");
-					String activationCode = req.params().get("activationCode");
+//					String activationCode = req.params().get("activationCode");
 					
 					if (sessionID == null || !controllerManager.validateSession(sessionID)) {
 						throw new ControllerException(401);
 					}
-					if (activationCode == null) {
-						throw new ControllerException(400);
-					}
+					// add to registered id list (DB)
+					ConfigManager.addNodeToAccount(controllerManager.getUserID(sessionID), nodeID);
 					
-					if (!nodeManager.moveNodeToConnectedList(nodeID, activationCode)) {
-						throw new ControllerException(403);
+					// if node is in waiting list, move to connected list
+					if (nodeManager.moveNodeToConnectedList(nodeID)) {
+						respondToController(req, 200);
+						sendToNode(nodeID, "/" + VERSION + "/activation", "{ \"sessionID\" : \"" + nodeManager.getSessionID(nodeID) + "\" }", req, false);
+					}else {
+						throw new ControllerException(404);
 					}
-							
-					respondToController(req, 200);
-					
-					// TODO send to SANode that it is activated.
-					sendToNode(nodeID, "/1.0/activation", "{ \"sessionID\" : \"" + nodeManager.getSessionID(nodeID) + "\" }", req, false);
 				} catch (ControllerException e) {
 					// TODO Auto-generated catch block
 					e.printStackTrace();
@@ -291,13 +301,8 @@ public class ServerMain {
 						throw new ControllerException(401);
 					}
 					// get connected List
-					String connectedListStr = nodeManager.getConnectedListJsonStr();
-					
-					String nodeListStr =  "{ ";
-					if (connectedListStr != null)
-						nodeListStr += connectedListStr;
-					nodeListStr += "}";
-							
+					String nodeListStr =  nodeManager.getNodeListStrbyUserID(controllerManager.getUserID(sessionID), false, true);
+
 					respondToController(req, 200, nodeListStr);
 				} catch (ControllerException e) {
 					// TODO Auto-generated catch block
@@ -317,13 +322,7 @@ public class ServerMain {
 						throw new ControllerException(401);
 					}
 					// get waiting List
-					String waitingListStr = nodeManager.getWaitingListJsonStr();
-					
-					String nodeListStr =  "{ ";
-					if (waitingListStr != null) {
-						nodeListStr += waitingListStr;
-					}
-					nodeListStr += "}";
+					String nodeListStr =  nodeManager.getNodeListStrbyUserID(controllerManager.getUserID(sessionID), true, false);
 							
 					respondToController(req, 200, nodeListStr);
 				} catch (ControllerException e) {
@@ -352,6 +351,12 @@ public class ServerMain {
 
 					String nodeID = req.params().get("nodeid");
 
+					// TODO check whether user registered nodeid or not.
+					if (!ConfigManager.isNodeRegistered(nodeID, controllerManager.getUserID(sessionID))) {
+						throw new ControllerException(400, "Not registered SA Node");
+					}
+					
+					// check node is connected
 					if (!nodeManager.isConnectedNode(nodeID)) {
 						throw new ControllerException(404);
 					}
@@ -380,15 +385,19 @@ public class ServerMain {
 					
 					String nodeID = req.params().get("nodeid");
 					
+					// TODO check whether user registered nodeid or not.
+					if (!ConfigManager.isNodeRegistered(nodeID, controllerManager.getUserID(sessionID))) {
+						throw new ControllerException(400, "Not registered SA Node");
+					}
+
 					if (!nodeManager.isConnectedNode(nodeID)) {
 						throw new ControllerException(404);
 					}
 
 					// send to SANode
-					sendToNode(nodeID, "/1.0/actuator", 
+					sendToNode(nodeID, "/" + VERSION + "/actuator", 
 							"{ \"" + req.params().get("actuator") + "\" : \"" + req.params().get("value") + "\" }", 
 							req, true);
-//					respondToController(req, 200, nodeInfoStr);
 				} catch (ControllerException e) {
 					// TODO Auto-generated catch block
 					e.printStackTrace();
@@ -408,14 +417,12 @@ public class ServerMain {
 						throw new ControllerException(401);
 					}
 					
-					respondToController(req, 200, Logger.getLogList());
+					respondToController(req, 200, Logger.getLogList(controllerManager.getUserID(sessionID)));
 				} catch (ControllerException e) {
 					// TODO Auto-generated catch block
 					e.printStackTrace();
 					respondToController(req, e.errorCode, e.getMessage());
 				}
-				// initial connection
-//				respondToController(req);
 			}
 		});
 
@@ -456,6 +463,20 @@ public class ServerMain {
 		return resJson.encode();
 	}
 	
+	static private String getUserIDFromRequest(HttpServerRequest req) {
+		String userID = req.params().get("ID");
+		
+		if (userID != null)
+			return userID;
+		
+		String sessionID = req.params().get("sessionID");
+		
+		if (sessionID != null)
+			return controllerManager.getUserID(sessionID);
+		
+		return null;
+	}
+
 	static private void printRequest(HttpServerRequest req) {
 		System.out.println("requestUri : "+ req.uri());
 		System.out.println("remoteAddress : "+ req.remoteAddress());
@@ -482,7 +503,7 @@ public class ServerMain {
 		
 		System.out.println(statusCode + " : " + jsonStr);
 		
-		Logger.logControllerCommand(requestToJson(req), statusCode, jsonStr);
+		Logger.logControllerCommand(requestToJson(req), statusCode, jsonStr, getUserIDFromRequest(req));
 	}
 	
 	static private void respondToController(HttpServerRequest req) {
@@ -509,7 +530,7 @@ public class ServerMain {
 		String jsonStr = (trimedBuffer.length() > urlNjson[0].length()) ? trimedBuffer.substring(urlNjson[0].length() + 1) : "";
 
 		try {
-			System.out.println(">> from Node : (" + urlNjson[0] + ") " + trimedBuffer);
+			System.out.println(">> from Node " + socket.remoteAddress() + " : (" + urlNjson[0] + ") " + trimedBuffer);
 		
 		RequestToNode requestToNode = requestToNodeMap.get(socket);;
 		
@@ -530,19 +551,16 @@ public class ServerMain {
 					respondToController(requestToNode.controllerReq, 200);
 					break;
 				}
-				// TODO Add Controller Command Log
 			}
 			break;
 		case "500" :
 			if (requestToNode != null && requestToNode.isResponseNeeded) {
 				respondToController(requestToNode.controllerReq, 500, jsonStr);
-				// TODO Add Controller Command Log
 			}
 			break;
 		case "400" :
 			if (requestToNode != null && requestToNode.isResponseNeeded) {
 				respondToController(requestToNode.controllerReq, 500, jsonStr);
-				// TODO Add Controller Command Log
 			}
 			break;
 		case "/" + VERSION + "/sanode" :	
@@ -674,8 +692,9 @@ class ControllerException extends Exception {
 		Map<Integer, String> errorStr = new HashMap<Integer, String>();
 		errorStr.put(400, "Bad request");
 		errorStr.put(401, "Invalid session ID");
-		errorStr.put(403, "Activation code mismatch");
+		errorStr.put(403, "ID or password mismatch");
 		errorStr.put(404, "Requested SA Node not found");
+		errorStr.put(406, "Not Acceptable");
 		errorStr.put(500, "Internal server failure");
 
         ERRORSTR = Collections.unmodifiableMap(errorStr);
@@ -700,14 +719,6 @@ class RequestToNode {
 	boolean isResponseNeeded;
 	String url;
 	String param;
-
-//	public RequestToNode(String nodeID, HttpServerRequest controllerReq,
-//			boolean isResponseNeeded) {
-//		super();
-//		this.nodeID = nodeID;
-//		this.controllerReq = controllerReq;
-//		this.isResponseNeeded = isResponseNeeded;
-//	}
 
 	public RequestToNode(String nodeID, HttpServerRequest controllerReq,
 			boolean isResponseNeeded, String url, String param) {

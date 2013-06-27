@@ -1,12 +1,19 @@
 package com.joyl.iotserver;
 
+import java.util.ArrayList;
+
 public class ControllerSession extends Session {
-	String controllerID;
-	
-	public ControllerSession(String controllerID, String sessionID) {
+	String userID;
+
+	public ControllerSession(String userID, String sessionID) {
 		// TODO Auto-generated constructor stub
-		this.controllerID = controllerID;
+		this.userID = userID;
 		this.sessionID = sessionID;
 		lastHeartbeat = System.currentTimeMillis();
 	}
+
+	public String getUserID() {
+		return userID;
+	}
+
 }

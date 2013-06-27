@@ -1,5 +1,6 @@
 package com.joyl.iotserver;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 
 public class ControllerManager {
@@ -7,7 +8,8 @@ public class ControllerManager {
 	private static final String SESSIONIDBASE = "coJlwhi12ofA";
 	private static int sessionIdx = 0;
 
-	private HashMap<String, ControllerSession> controllerList = new HashMap<String, ControllerSession>();	// Activated & Connected Node List
+	// sessionID : ControllerSession
+	private HashMap<String, ControllerSession> controllerList = new HashMap<String, ControllerSession>();
 
 	public ControllerManager() {
 		// TODO Auto-generated constructor stub
@@ -39,5 +41,9 @@ public class ControllerManager {
 			if (!controllerList.get(sessionID).isAlive(timeDurationMillis))
 				controllerList.remove(sessionID);			
 		}
+	}
+	
+	public String getUserID(String sessionID) {
+		return controllerList.get(sessionID).getUserID();
 	}
 }
