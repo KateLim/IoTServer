@@ -262,7 +262,6 @@ public class ServerMain {
 		});
 
 		// IC05. Activate SA Node
-		// handle SA Node : /nodelist/connected/[nodeID]/[actuatorName]
 		rm.put("/" + VERSION + "/nodelist/connected/:nodeid", new Handler<HttpServerRequest>() {
 			public void handle(HttpServerRequest req) {
 				try {
@@ -278,10 +277,10 @@ public class ServerMain {
 					
 					// if node is in waiting list, move to connected list
 					if (nodeManager.moveNodeToConnectedList(nodeID)) {
-						respondToController(req, 200);
+						respondToController(req, 200, "{ \"message\" : \"SA Node is added to connected list\"}");
 						sendToNode(nodeID, "/" + VERSION + "/activation", "{ \"sessionID\" : \"" + nodeManager.getSessionID(nodeID) + "\" }", req, false);
 					}else {
-						throw new ControllerException(404);
+						respondToController(req, 200, "{ \"message\" : \"SA Node is added to waiting list\"}");
 					}
 				} catch (ControllerException e) {
 					// TODO Auto-generated catch block
@@ -333,10 +332,45 @@ public class ServerMain {
 			}
 		});
 
-		// TODO : /nodelist/black*
-		// IC08. Get SA Node black list 
-		// IC09. Delete SA Node from black list
-		// IC10. Put SA Node to black list
+		// IC08. Deactivate SA Node
+		rm.delete("/" + VERSION + "/nodelist/connected/:nodeid", new Handler<HttpServerRequest>() {
+			public void handle(HttpServerRequest req) {
+				try {
+					String nodeID = req.params().get("nodeid");
+					String sessionID = req.params().get("sessionID");
+					
+					if (sessionID == null || !controllerManager.validateSession(sessionID)) {
+						throw new ControllerException(401);
+					}
+					
+					if (!ConfigManager.isNodeRegistered(nodeID, controllerManager.getUserID(sessionID))) {
+						throw new ControllerException(404);						
+					}
+					
+					// Remove nodeID from user's activation list
+					ConfigManager.removeNodeFromAccount(controllerManager.getUserID(sessionID), nodeID);
+					
+					// if node is in waiting list, move to connected list
+					if (nodeManager.moveNodeToWaitingList(nodeID)) {
+						respondToController(req, 200, "{ \"message\" : \"SA Node is removed from connected list\"}");
+						sendToNode(nodeID, "/" + VERSION + "/deactivation", "{ \"sessionID\" : \"" + nodeManager.getSessionID(nodeID) + "\" }", req, false);
+					}else {
+						respondToController(req, 200, "{ \"message\" : \"SA Node is removed from waiting list\"}");
+					}
+
+					// If none of user are interested in node, deactivate node.
+					if (!ConfigManager.isNodeRegistered(nodeID)) {
+						sendToNode(nodeID, "/" + VERSION + "/deactivation", "{ \"sessionID\" : \"" + nodeManager.getSessionID(nodeID) + "\" }", req, false);
+						// TODO deactivate node //move to waiting list
+						
+					}
+				} catch (ControllerException e) {
+					// TODO Auto-generated catch block
+					e.printStackTrace();
+					respondToController(req, e.errorCode, e.getMessage());
+				}
+			}
+		});
 		
 		// IC11. Get SA Node Info (Current value)
 		// get current SA Node Info

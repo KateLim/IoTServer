@@ -23,20 +23,22 @@ public class ConfigManager {
 	}
 
 	public static boolean addAccount(String id, String password) {
-		DBObject obj = collCfg.findOne((DBObject) JSON.parse("{ ID : \"" + id	+ "\" }"));
+		DBObject obj = collCfg.findOne((DBObject) JSON.parse("{ ID : \"" + id
+				+ "\" }"));
 
 		// if ID already exists, return false
 		if (obj != null)
 			return false;
 
-		collCfg.insert((DBObject) JSON.parse("{ ID : \"" + id + "\", password : \""
-				+ password + "\" }"));
+		collCfg.insert((DBObject) JSON.parse("{ ID : \"" + id
+				+ "\", password : \"" + password + "\" }"));
 
 		return true;
 	}
 
 	public static boolean checkAccountIDPassword(String id, String password) {
-		DBObject obj = collCfg.findOne((DBObject) JSON.parse("{ ID : \"" + id	+ "\" }"));
+		DBObject obj = collCfg.findOne((DBObject) JSON.parse("{ ID : \"" + id
+				+ "\" }"));
 
 		// if ID doesn't exist, return false
 		if (obj == null)
@@ -52,37 +54,36 @@ public class ConfigManager {
 
 	public static boolean addNodeToAccount(String id, String nodeID) {
 		// db.config.update({ ID : "mimir"}, {$addToSet : { nodes : "kkkk"}})
-		WriteResult res = collCfg.update((DBObject) JSON.parse("{ ID : \"" + id + "\" }"), 
-				(DBObject) JSON.parse("{ $addToSet : { nodes : \"" + nodeID + "\" }}"));
-		
-		   if (res.getError() == null) {
-			   return false;
-			    } else {
-			      return true;
-			    }
+		WriteResult res = collCfg.update(
+				(DBObject) JSON.parse("{ ID : \"" + id + "\" }"),
+				(DBObject) JSON.parse("{ $addToSet : { nodes : \"" + nodeID
+						+ "\" }}"));
 
-		// if ID doesn't exist, return false
-//		if (obj == null)
-//			return false;
-//
-//		JsonObject jsonObj = new JsonObject(obj.toString());
-//		JsonArray jsonArr = jsonObj.getArray("nodes");
-//
-//		if (jsonArr == null) {
-//			jsonArr = new JsonArray();
-//			jsonArr.add(nodeID);
-//		} else if (!jsonArr.contains(nodeID)) {
-//			jsonArr.add(nodeID);
-//		}
-//
-//		jsonObj.putArray("nodes", jsonArr);
-//
-//		return true;
+		if (res.getError() == null) {
+			return false;
+		} else {
+			return true;
+		}
+	}
+
+	public static boolean removeNodeFromAccount(String id, String nodeID) {
+		// db.config.update({ ID : "mimir"}, {$pull : { nodes : "kkkk"}})
+		WriteResult res = collCfg.update(
+				(DBObject) JSON.parse("{ ID : \"" + id + "\" }"),
+				(DBObject) JSON.parse("{ $pull : { nodes : \"" + nodeID
+						+ "\" }}"));
+
+		if (res.getError() == null) {
+			return false;
+		} else {
+			return true;
+		}
 	}
 
 	public static ArrayList<String> getMatchedNodeID(String id,
 			ArrayList<String> connectedNodeIDList) {
-		DBObject obj = collCfg.findOne((DBObject) JSON.parse("{ ID : \"" + id	+ "\" }"));
+		DBObject obj = collCfg.findOne((DBObject) JSON.parse("{ ID : \"" + id
+				+ "\" }"));
 
 		// if ID doesn't exist, return false
 		if (obj == null)
@@ -102,7 +103,8 @@ public class ConfigManager {
 	}
 
 	public static ArrayList<String> getRegisteredNodeIDList(String id) {
-		DBObject obj = collCfg.findOne((DBObject) JSON.parse("{ ID : \"" + id	+ "\" }"));
+		DBObject obj = collCfg.findOne((DBObject) JSON.parse("{ ID : \"" + id
+				+ "\" }"));
 		ArrayList<String> registeredList = new ArrayList<String>();
 
 		// if ID doesn't exist, return false
@@ -111,7 +113,7 @@ public class ConfigManager {
 
 		JsonObject jsonObj = new JsonObject(obj.toString());
 		JsonArray jsonArr = jsonObj.getArray("nodes");
-		
+
 		if (jsonArr == null)
 			return registeredList;
 
@@ -119,33 +121,36 @@ public class ConfigManager {
 			registeredList.add(curObj.toString());
 		}
 
-		System.out.println("getRegisteredNodeIDList : " + registeredList.toString());
+		System.out.println("getRegisteredNodeIDList : "
+				+ registeredList.toString());
 		return registeredList;
 	}
-	
+
 	public static boolean isNodeRegistered(String nodeID) {
-		DBObject obj = collCfg.findOne((DBObject) JSON.parse("{ nodes : \"" + nodeID + "\" }"));
-		
+		DBObject obj = collCfg.findOne((DBObject) JSON.parse("{ nodes : \""
+				+ nodeID + "\" }"));
+
 		if (obj == null)
 			return false;
-		
+
 		return true;
 	}
 
 	public static boolean isNodeRegistered(String nodeID, String id) {
-		DBObject obj = collCfg.findOne((DBObject) JSON.parse(
-				"{ ID : \"" + id + "\", nodes : \"" + nodeID + "\" }"));
-		
+		DBObject obj = collCfg.findOne((DBObject) JSON.parse("{ ID : \"" + id
+				+ "\", nodes : \"" + nodeID + "\" }"));
+
 		if (obj == null)
 			return false;
-		
+
 		return true;
 	}
-	
+
 	public static JsonArray getRegisteredUserIDList(String nodeID) {
-		DBCursor cursor = collCfg.find((DBObject) JSON.parse("{ nodes : \"" + nodeID + "\" }"), 
-						(DBObject) JSON.parse("{ _id : 0, nodes : 0 }"));
-		
+		DBCursor cursor = collCfg.find(
+				(DBObject) JSON.parse("{ nodes : \"" + nodeID + "\" }"),
+				(DBObject) JSON.parse("{ _id : 0, nodes : 0 }"));
+
 		JsonArray idArray = new JsonArray();
 
 		try {
@@ -158,7 +163,7 @@ public class ConfigManager {
 		} finally {
 			cursor.close();
 		}
-		
+
 		return idArray;
 	}
 }

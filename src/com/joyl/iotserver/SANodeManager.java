@@ -188,10 +188,17 @@ public class SANodeManager {
 //		return true;
 //	}
 
+	/**
+	 * @param nodeID
+	 * @return true if node is successfully moved to connected list or if node is already in connected list.
+	 */
 	public boolean moveNodeToConnectedList(String nodeID) {
 		SANode node = waitingNodeList.get(nodeID);
-		if (node == null)
+		if (node == null) {
+			if (connectedNodeList.containsKey(nodeID))
+				return true;
 			return false;
+		}
 		
 		System.out.println("++++MOVE TO CONNECTED LIST++++++" + node.getDescriptionJsonObj());
 		node.setStatus(NodeStatus.ACTIVATED);
@@ -206,6 +213,27 @@ public class SANodeManager {
 		return true;
 	}
 	
+	/**
+	 * @param nodeID
+	 * @return true if node is successfully moved to waiting list or if node is already in waiting list.
+	 */
+	public boolean moveNodeToWaitingList(String nodeID) {
+		if (waitingNodeList.containsKey(nodeID)) {
+			return true;
+		}
+		if (!connectedNodeList.containsKey(nodeID))
+			return false;
+
+		SANode node = connectedNodeList.get(nodeID).getNode();
+		waitingNodeList.put(nodeID, node);
+		connectedNodeList.remove(nodeID);
+		
+		System.out.println("++++MOVE TO WAITING LIST++++++" + node.getDescriptionJsonObj());
+		node.setStatus(NodeStatus.WAITING);
+
+		return true;
+	}
+
 	public String getNodeValueJsonStr(String nodeID) {
 		SANodeSession session = connectedNodeList.get(nodeID);
 		
