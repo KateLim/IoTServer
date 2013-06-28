@@ -11,14 +11,14 @@ import com.mongodb.DBObject;
 import com.mongodb.WriteResult;
 import com.mongodb.util.JSON;
 
-public class ConfigManager {
+public class AccountManager {
 	static DBCollection collCfg;
 
 	public static void setCollCfg(DBCollection collCfg) {
-		ConfigManager.collCfg = collCfg;
+		AccountManager.collCfg = collCfg;
 	}
 
-	public ConfigManager() {
+	public AccountManager() {
 		// TODO Auto-generated constructor stub
 	}
 

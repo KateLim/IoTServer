@@ -20,12 +20,6 @@ public class SANodeManager {
 	public SANodeManager() {
 	}
 
-	private boolean isInActivatedList(String nodeID) {
-		// TODO must check whether user registered this id no not
-		return ConfigManager.isNodeRegistered(nodeID);
-//		return activatedIDList.contains(nodeID);
-	}
-
 	private String generateSessionID() {
 		String sessionID =  SESSIONIDBASE + sessionNum++;
 		
@@ -37,7 +31,7 @@ public class SANodeManager {
 	}
 	
 	public NodeStatus handleNewNode(SANode node) {
-		if (isInActivatedList(node.getID())) {
+		if (AccountManager.isNodeRegistered(node.getID())) {
 			node.setStatus(NodeStatus.ACTIVATED);
 //			SANodeSession nodeSession = new SANodeSession(node, generateSessionID());
 			// IMPORTANT session ID is not automatically generated but use Activation Code for temporal implementation
@@ -223,7 +217,7 @@ public class SANodeManager {
 	}
 	
 	public String getNodeListStrbyUserID(String userID, boolean generateWaitingList, boolean generateConnectedList) {
-		ArrayList<String> registeredNodeIDList = ConfigManager.getRegisteredNodeIDList(userID);
+		ArrayList<String> registeredNodeIDList = AccountManager.getRegisteredNodeIDList(userID);
 
 		JsonObject connectedListObj = new JsonObject();
 		JsonArray waitingListArray = new JsonArray();

@@ -127,7 +127,7 @@ public class ServerMain {
 		        collConfig = db.createCollection(CFGCOLLNAME, options);
 		    }
 			
-			ConfigManager.setCollCfg(collConfig);
+			AccountManager.setCollCfg(collConfig);
 		} catch (UnknownHostException e) {
 			// TODO Auto-generated catch block
 			e.printStackTrace();
@@ -154,7 +154,7 @@ public class ServerMain {
 						throw new ControllerException(400);
 					}
 					
-					if (ConfigManager.addAccount(ID, password)) {
+					if (AccountManager.addAccount(ID, password)) {
 						respondToController(req, 200, "{ \"next\" : \"login\" }");
 					}else {
 						throw new ControllerException(406);
@@ -198,7 +198,7 @@ public class ServerMain {
 					
 					if (ID == null || password == null) {
 						throw new ControllerException(400);
-					}else if (!ConfigManager.checkAccountIDPassword(ID, password)) {
+					}else if (!AccountManager.checkAccountIDPassword(ID, password)) {
 						throw new ControllerException(403);
 					}
 					
@@ -247,7 +247,7 @@ public class ServerMain {
 						throw new ControllerException(401);
 					}
 					// add to registered id list (DB)
-					ConfigManager.addNodeToAccount(controllerManager.getUserID(sessionID), nodeID);
+					AccountManager.addNodeToAccount(controllerManager.getUserID(sessionID), nodeID);
 					
 					// if node is in waiting list, move to connected list
 					if (nodeManager.moveNodeToConnectedList(nodeID)) {
@@ -317,17 +317,17 @@ public class ServerMain {
 						throw new ControllerException(401);
 					}
 					
-					if (!ConfigManager.isNodeRegistered(nodeID, controllerManager.getUserID(sessionID))) {
+					if (!AccountManager.isNodeRegistered(nodeID, controllerManager.getUserID(sessionID))) {
 						throw new ControllerException(404);						
 					}
 					
 					// Remove nodeID from user's activation list
-					ConfigManager.removeNodeFromAccount(controllerManager.getUserID(sessionID), nodeID);
+					AccountManager.removeNodeFromAccount(controllerManager.getUserID(sessionID), nodeID);
 
 					respondToController(req, 200, "{ \"message\" : \"SA Node is removed from connected list\"}");
 					
 					// If none of user are interested in node and node is in connected list, move to waiting list
-					if ((!ConfigManager.isNodeRegistered(nodeID)) && nodeManager.moveNodeToWaitingList(nodeID)) {
+					if ((!AccountManager.isNodeRegistered(nodeID)) && nodeManager.moveNodeToWaitingList(nodeID)) {
 						sendToNode(nodeID, "/" + VERSION + "/deactivation", "{\"sessionID\":\"" + nodeManager.getSessionID(nodeID) + "\"}", req, false);
 					}
 				} catch (ControllerException e) {
@@ -352,7 +352,7 @@ public class ServerMain {
 					String nodeID = req.params().get("nodeid");
 
 					// TODO check whether user registered nodeid or not.
-					if (!ConfigManager.isNodeRegistered(nodeID, controllerManager.getUserID(sessionID))) {
+					if (!AccountManager.isNodeRegistered(nodeID, controllerManager.getUserID(sessionID))) {
 						throw new ControllerException(400, "Not registered SA Node");
 					}
 					
@@ -388,7 +388,7 @@ public class ServerMain {
 					String nodeID = req.params().get("nodeid");
 					
 					// TODO check whether user registered nodeid or not.
-					if (!ConfigManager.isNodeRegistered(nodeID, controllerManager.getUserID(sessionID))) {
+					if (!AccountManager.isNodeRegistered(nodeID, controllerManager.getUserID(sessionID))) {
 						throw new ControllerException(400, "Not registered SA Node");
 					}
 

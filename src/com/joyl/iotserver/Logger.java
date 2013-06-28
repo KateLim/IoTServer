@@ -36,7 +36,7 @@ public class Logger {
 		jsonObj.putString("nodeID", nodeID);
 		jsonObj.putString("nodeName", nodeName);
 		jsonObj.putObject("data", new JsonObject(nodeValue));
-		jsonObj.putArray("users", ConfigManager.getRegisteredUserIDList(nodeID));
+		jsonObj.putArray("users", AccountManager.getRegisteredUserIDList(nodeID));
 
 		collLog.insert(jsonToDBObject(jsonObj));
 	}
