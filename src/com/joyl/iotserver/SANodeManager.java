@@ -5,6 +5,7 @@ import java.util.HashMap;
 
 import org.vertx.java.core.json.JsonArray;
 import org.vertx.java.core.json.JsonObject;
+import org.vertx.java.core.net.NetSocket;
 
 import com.joyl.iotserver.SANode.NodeStatus;
 
@@ -71,6 +72,7 @@ public class SANodeManager {
 		return true;
 	}
 	
+	// when SA Node reports its actuator value
 	public boolean updateActuatorValue(String nodeID, String sessionID, JsonObject actuatorValue) {
 		SANodeSession session = connectedNodeList.get(nodeID);
 
@@ -160,6 +162,7 @@ public class SANodeManager {
 	 */
 	public boolean moveNodeToConnectedList(String nodeID) {
 		SANode node = waitingNodeList.get(nodeID);
+		
 		if (node == null) {
 			if (connectedNodeList.containsKey(nodeID))
 				return true;
@@ -170,7 +173,9 @@ public class SANodeManager {
 		node.setStatus(NodeStatus.ACTIVATED);
 //		connectedNodeList.put(nodeID, new SANodeSession(node, generateSessionID()));
 		// IMPORTANT session ID is not automatically generated but use Activation Code for temporal implementation
-		connectedNodeList.put(nodeID, new SANodeSession(node, node.getActivationCode()));
+		SANodeSession session = new SANodeSession(node, node.getActivationCode());
+
+		connectedNodeList.put(nodeID, session);
 				
 		waitingNodeList.remove(nodeID);
 		
@@ -209,8 +214,11 @@ public class SANodeManager {
 
 	public void removeOldSession(long timeDurationMillis) {
 		for (String nodeID : connectedNodeList.keySet()) {
-			if (!connectedNodeList.get(nodeID).isAlive(timeDurationMillis))
-				connectedNodeList.remove(nodeID);			
+			if (!connectedNodeList.get(nodeID).isAlive(timeDurationMillis)) {
+				System.out.println("removeOldSession : " + nodeID + " is removed");
+//				connectedNodeList.get(nodeID).getNode().getSocket().close();
+				connectedNodeList.remove(nodeID);
+			}
 		}
 	}
 	
@@ -239,5 +247,23 @@ public class SANodeManager {
 			nodeList.putObject("connectedList", connectedListObj);
 		
 		return nodeList.encode();
+	}
+	
+	public void setSocket(String nodeID, NetSocket socket) {
+		SANodeSession session = connectedNodeList.get(nodeID);
+		
+		if (session == null)
+			return;
+		
+		session.getNode().setSocket(socket); 
+	}
+
+	public NetSocket getSocket(String nodeID) {
+		SANodeSession session = connectedNodeList.get(nodeID);
+		
+		if (session == null)
+			return null;
+		
+		return session.getNode().getSocket(); 
 	}
 }

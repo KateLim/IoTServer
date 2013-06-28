@@ -13,7 +13,7 @@ public class PeriodicTimer extends Thread {
 
 		timer = new Timer();
 		timer.schedule(new PeriodicTask(controllerSessionTimeout,
-				controllerSessionTimeout, logTimeout, controllerManager,
+				sanodeSessionTimeout, logTimeout, controllerManager,
 				sanodeManager), 0, // initial delay
 				1 * 1000); // subsequent rate
 	}

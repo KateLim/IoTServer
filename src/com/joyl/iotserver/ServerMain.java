@@ -36,7 +36,7 @@ public class ServerMain {
 	static ControllerManager controllerManager = new ControllerManager();
 	
 	static SANodeManager nodeManager = new SANodeManager();
-	static ConcurrentHashMap<String, NetSocket> nodeSocketMap = new ConcurrentHashMap<String, NetSocket>(); // SANodeID : NetSocket
+//	static ConcurrentHashMap<String, NetSocket> nodeSocketMap = new ConcurrentHashMap<String, NetSocket>(); // SANodeID : NetSocket
 	
 	static ConcurrentHashMap<NetSocket, RequestToNode> requestToNodeMap = new ConcurrentHashMap<NetSocket, RequestToNode>();
 
@@ -79,12 +79,6 @@ public class ServerMain {
 				socket.closeHandler(new Handler<Void>() {
 					public void handle(Void v) {
 						// handling socket close
-						for (String nodeID : nodeSocketMap.keySet()) {
-							if (nodeSocketMap.equals(socket)) {
-								nodeSocketMap.remove(nodeID);
-								break;
-							}
-						}
 						if (requestToNodeMap.get(socket) != null) {
 							requestToNodeMap.remove(socket);
 						}
@@ -95,7 +89,7 @@ public class ServerMain {
 
 		// Set Periodic timer to manage Controller/SANode session and old logs
 		long timeoutDuration = 72*60*60*1000;	// 72 hours
-		new PeriodicTimer(timeoutDuration, 9000, timeoutDuration,
+		new PeriodicTimer(timeoutDuration, 30000, timeoutDuration,
 				controllerManager, nodeManager); 
 	}
 
@@ -542,11 +536,13 @@ public class ServerMain {
 		try {
 			System.out.println(">> from Node " + socket.remoteAddress() + " : (" + urlNjson[0] + ") " + trimedBuffer);
 		
-		RequestToNode requestToNode = requestToNodeMap.get(socket);;
+		RequestToNode requestToNode;
 		
 		switch (urlNjson[0]) // for URL
 		{
 		case "200" :
+			requestToNode = requestToNodeMap.get(socket);
+			
 			if (requestToNode != null && requestToNode.isResponseNeeded) {
 				switch (requestToNode.url) {
 				case "/" + VERSION + "/activation" :
@@ -562,29 +558,34 @@ public class ServerMain {
 					break;
 				}
 			}
+			requestToNodeMap.remove(socket);
 			break;
 		case "500" :
+			requestToNode = requestToNodeMap.get(socket);
+			
 			if (requestToNode != null && requestToNode.isResponseNeeded) {
 				respondToController(requestToNode.controllerReq, 500, jsonStr);
 			}
+			requestToNodeMap.remove(socket);
 			break;
 		case "400" :
+			requestToNode = requestToNodeMap.get(socket);
+			
 			if (requestToNode != null && requestToNode.isResponseNeeded) {
 				respondToController(requestToNode.controllerReq, 500, jsonStr);
 			}
+			requestToNodeMap.remove(socket);
 			break;
 		case "/" + VERSION + "/sanode" :	
 			// IS01. Connect to IoT Server
 			//		/sanode
-			SANode node = new SANode(jsonStr);
+			SANode node = new SANode(jsonStr, socket);
 			
 			switch (nodeManager.handleNewNode(node)) {
 				case ACTIVATED :
 					socket.write("200 { \"sessionID\" : \"" + nodeManager.getSessionID(node.getID()) + "\"}\n");
-					nodeSocketMap.put(node.getID(), socket);
 					break;
 				case WAITING :
-					nodeSocketMap.put(node.getID(), socket);
 					throw new NodeException(401);
 				case BLOCKED :
 					throw new NodeException(403);
@@ -610,7 +611,8 @@ public class ServerMain {
 						throw new NodeException(401, "Invalid session ID.");
 				
 				// update socket info. 
-				nodeSocketMap.put(nodeID, socket);
+				//nodeSocketMap.put(nodeID, socket);
+				nodeManager.setSocket(nodeID, socket);
 
 				switch (splittedUrl.length)
 				{
@@ -651,13 +653,13 @@ public class ServerMain {
 	}
 	
 	static boolean sendToNode(String nodeID, String url, String json, HttpServerRequest req, boolean isResponseNeeded) {
-		NetSocket socket = nodeSocketMap.get(nodeID);
+		NetSocket socket = nodeManager.getSocket(nodeID);
 		
 		if (socket == null)
 			return false;
 		
 		requestToNodeMap.put(socket, new RequestToNode(nodeID, req, isResponseNeeded, url, json));
-		nodeSocketMap.get(nodeID).write(url + " " + json + "\n");
+		socket.write(url + " " + json + "\n");
 		
 		return true;
 	}

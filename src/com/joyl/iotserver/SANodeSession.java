@@ -1,11 +1,10 @@
 package com.joyl.iotserver;
 
 import org.vertx.java.core.json.JsonObject;
+import org.vertx.java.core.net.NetSocket;
 
 public class SANodeSession  extends Session {
 	private SANode node;
-//	private String sessionID;
-//	private long lastHeartbeat;	// time in milliseconds
 	private JsonObject lastSensorValue;	// sensor value in Json String
 	private JsonObject lastActuatorValue;	// actuator value in Json String
 
@@ -15,16 +14,15 @@ public class SANodeSession  extends Session {
 		this.sessionID = sessionID;
 		lastHeartbeat = System.currentTimeMillis();
 
-		if (this.node.haveSensor())
-			lastSensorValue = new JsonObject();
-		else 
+		if (this.node.haveSensor()) {
+			lastSensorValue = node.getFirstSensorValue();
+		} else 
 			lastSensorValue = null;
 		
-		if (this.node.haveActuator())
-			lastActuatorValue = new JsonObject();
-		else 
+		if (this.node.haveActuator()) {
+			lastActuatorValue = node.getFirstActuatorValue();
+		} else 
 			lastActuatorValue = null;
-		
 	}
 	
 	public SANode getNode() {
@@ -36,11 +34,15 @@ public class SANodeSession  extends Session {
 	}
 	
 	public void setLastSensorValue(JsonObject lastSensorValue) {
+		
 		if (this.lastSensorValue == null)
 			return;
 		
 		for (String sensorName : lastSensorValue.getFieldNames()) {
-			this.lastSensorValue.putString(sensorName, lastSensorValue.getString(sensorName));
+			if (node.haveSensor(sensorName))
+				// TODO temporarily change to get Number instead of string
+				this.lastSensorValue.putString(sensorName, lastSensorValue.getNumber(sensorName).toString());
+//				this.lastSensorValue.putString(sensorName, lastSensorValue.getString(sensorName));
 		}
 		
 		Logger.logSANodeValue(node.getID(), node.getName(), getLastSensorActuatorValueStr());
@@ -51,7 +53,8 @@ public class SANodeSession  extends Session {
 			return;
 		
 		for (String actuatorName : lastActuatorValue.getFieldNames()) {
-			this.lastActuatorValue.putString(actuatorName, lastActuatorValue.getString(actuatorName));
+			if (node.haveActuator(actuatorName))
+				this.lastActuatorValue.putString(actuatorName, lastActuatorValue.getString(actuatorName));
 		}
 
 		Logger.logSANodeValue(node.getID(), node.getName(), getLastSensorActuatorValueStr());

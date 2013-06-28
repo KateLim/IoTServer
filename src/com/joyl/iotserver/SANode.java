@@ -1,6 +1,7 @@
 package com.joyl.iotserver;
 
 import org.vertx.java.core.json.JsonObject;
+import org.vertx.java.core.net.NetSocket;
 
 public class SANode {
 	static enum NodeStatus { ACTIVATED, WAITING, BLOCKED};
@@ -14,8 +15,18 @@ public class SANode {
 	private NodeStatus status;
 	
 	private JsonObject jsonObj;
+	
+	private NetSocket socket;
 
-	SANode(String nodeJsonStr) {
+	public NetSocket getSocket() {
+		return socket;
+	}
+
+	public void setSocket(NetSocket socket) {
+		this.socket = socket;
+	}
+
+	SANode(String nodeJsonStr, NetSocket socket) {
 		jsonObj = new JsonObject(nodeJsonStr);
 		
 		name = jsonObj.getString("nodeName");
@@ -73,11 +84,69 @@ public class SANode {
 		return true;
 	}
 	
+	public boolean haveSensor(String sensorName) {
+		if (jsonObj.getObject("sensorList") == null)
+			return false;
+		
+//		System.out.println("haveSensor" + jsonObj.getObject("sensorList").encode());
+		
+		if (jsonObj.getObject("sensorList").getObject(sensorName) == null)
+			return false;
+		
+		return true;
+	}
+
 	public boolean haveActuator() {
 		if (jsonObj.getObject("actuatorList") == null)
 			return false;
 		
 		return true;
+	}
+
+	public boolean haveActuator(String actuatorName) {
+		if (jsonObj.getObject("actuatorList") == null)
+			return false;
+		
+		System.out.println("haveActuator" + jsonObj.getObject("actuatorList").encode());
+		
+		if (jsonObj.getObject("actuatorList").getField(actuatorName) == null)
+			return false;
+
+		return true;
+	}
+	
+	public JsonObject getFirstSensorValue() {
+		JsonObject sensorList = jsonObj.getObject("sensorList");
+		
+		if (sensorList == null)
+			return null;
+		
+		JsonObject sensorValue = new JsonObject();
+
+		for (String sensorName : sensorList.getFieldNames()) {
+			sensorValue.putString(sensorName, "0");
+		}
+		
+		System.out.println("getFirstSensorValue" + sensorValue.encode());
+
+		return sensorValue;
+	}
+
+	public JsonObject getFirstActuatorValue() {
+		JsonObject actuatorList = jsonObj.getObject("actuatorList");
+		
+		if (actuatorList == null)
+			return null;
+		
+		JsonObject actuatorValue = new JsonObject();
+
+		for (String actuatorName : actuatorList.getFieldNames()) {
+			actuatorValue.putString(actuatorName, actuatorList.getArray(actuatorName).get(0).toString());
+		}
+		
+		System.out.println("getFirstActuatorValue" + actuatorValue.encode());
+		
+		return actuatorValue;
 	}
 }
 
